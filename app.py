@@ -82,6 +82,8 @@ def snapshot_stats(timestamp: int) -> dict:
         "timestamp": timestamp,
         "total": len(rows),
         "countries_total": len(countries),
+        "asns_total": len(asns),
+        "user_agents_total": len(user_agents),
         "median_height": median_height,
         "top_countries": countries.most_common(15),
         "top_user_agents": user_agents.most_common(15),

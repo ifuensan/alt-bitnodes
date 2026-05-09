@@ -89,7 +89,7 @@ async function loadSnapshot(ts) {
   currentNodes = snap.nodes;
   document.getElementById("kpi-total").textContent = fmt.format(stats.total);
   document.getElementById("kpi-countries").textContent = fmt.format(stats.countries_total);
-  document.getElementById("kpi-asns").textContent = fmt.format(stats.top_asns.length);
+  document.getElementById("kpi-asns").textContent = fmt.format(stats.asns_total);
   document.getElementById("kpi-height").textContent = stats.median_height ?? "—";
   document.getElementById("snapshot-meta").textContent =
     new Date(ts * 1000).toISOString().replace("T", " ").slice(0, 19) + " UTC";
@@ -109,6 +109,7 @@ async function loadSnapshot(ts) {
 
   updateMap(currentNodes);
   updateTable(currentNodes);
+  setTimeout(() => map.invalidateSize(), 50);
 }
 
 async function init() {
