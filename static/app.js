@@ -9,11 +9,20 @@ async function fetchJSON(url) {
 }
 
 function initMap() {
-  map = L.map("map", { worldCopyJump: true }).setView([20, 0], 2);
+  map = L.map("map", {
+    dragging: false,
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    touchZoom: false,
+    keyboard: false,
+    boxZoom: false,
+    zoomControl: true,
+  }).setView([20, 0], 2);
   L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
     attribution: "© OpenStreetMap, © CARTO",
     subdomains: "abcd",
     maxZoom: 19,
+    noWrap: true,
   }).addTo(map);
   markers = L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 50 });
   map.addLayer(markers);
