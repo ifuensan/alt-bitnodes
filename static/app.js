@@ -1,6 +1,7 @@
 const fmt = new Intl.NumberFormat("en-US");
-let map, markers, charts = {};
+let charts = {};
 let currentNodes = [];
+let globeInitialized = false;
 
 async function fetchJSON(url) {
   const r = await fetch(url);
@@ -8,39 +9,47 @@ async function fetchJSON(url) {
   return r.json();
 }
 
-function initMap() {
-  map = L.map("map", {
-    dragging: false,
-    scrollWheelZoom: false,
-    doubleClickZoom: false,
-    touchZoom: false,
-    keyboard: false,
-    boxZoom: false,
-    zoomControl: true,
-  }).setView([20, 0], 2);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution: "© OpenStreetMap, © CARTO",
-    subdomains: "abcd",
-    maxZoom: 19,
-    noWrap: true,
-  }).addTo(map);
-  markers = L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 50 });
-  map.addLayer(markers);
-}
-
-function updateMap(nodes) {
-  markers.clearLayers();
-  const batch = [];
-  for (const n of nodes) {
-    if (n.latitude == null || n.longitude == null) continue;
-    const m = L.circleMarker([n.latitude, n.longitude], {
-      radius: 4, color: "#f7931a", weight: 1, fillOpacity: 0.6,
-    }).bindPopup(
-      `<b>${n.address}:${n.port}</b><br>${n.user_agent || ""}<br>${n.city || ""}, ${n.country || ""}<br>${n.asn || ""} ${n.asn_name || ""}<br>height: ${n.height}`
-    );
-    batch.push(m);
+function updateGlobe(stats) {
+  const locations = stats.countries_iso3.map(([iso3]) => iso3);
+  const counts = stats.countries_iso3.map(([, c]) => c);
+  const data = [{
+    type: "choropleth",
+    locationmode: "ISO-3",
+    locations,
+    z: counts,
+    colorscale: [
+      [0,    "#1a2a1a"],
+      [0.25, "#244c24"],
+      [0.5,  "#3a8a3a"],
+      [0.75, "#7ad57a"],
+      [1,    "#cdf5cd"],
+    ],
+    showscale: false,
+    marker: { line: { color: "#0e1116", width: 0.4 } },
+    hovertemplate: "<b>%{location}</b><br>%{z} nodes<extra></extra>",
+  }];
+  const layout = {
+    geo: {
+      projection: { type: "orthographic", rotation: { lon: -30, lat: 25 } },
+      showocean: true, oceancolor: "#0a0d12",
+      showland: true,  landcolor: "#161b22",
+      showcountries: true, countrycolor: "#0e1116",
+      showcoastlines: false,
+      showframe: false,
+      bgcolor: "#161b22",
+    },
+    paper_bgcolor: "#161b22",
+    plot_bgcolor: "#161b22",
+    margin: { l: 0, r: 0, t: 0, b: 0 },
+    font: { color: "#e6edf3" },
+  };
+  const config = { displayModeBar: false, responsive: true };
+  if (!globeInitialized) {
+    Plotly.newPlot("globe", data, layout, config);
+    globeInitialized = true;
+  } else {
+    Plotly.react("globe", data, layout, config);
   }
-  markers.addLayers(batch);
 }
 
 function makeBarChart(canvasId, labels, values, label) {
@@ -116,13 +125,11 @@ async function loadSnapshot(ts) {
     stats.top_asns.map(([, v]) => v),
     "nodes");
 
-  updateMap(currentNodes);
+  updateGlobe(stats);
   updateTable(currentNodes);
-  setTimeout(() => map.invalidateSize(), 50);
 }
 
 async function init() {
-  initMap();
   const { timestamps } = await fetchJSON("/api/snapshots");
   const select = document.getElementById("snapshot-select");
   for (const ts of [...timestamps].reverse()) {

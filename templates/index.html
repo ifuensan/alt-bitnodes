@@ -3,9 +3,6 @@
 <head>
 <meta charset="utf-8">
 <title>Bitnodes Dashboard</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
-<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
@@ -28,8 +25,8 @@
 
 <section class="grid">
   <div class="panel map-panel">
-    <h2>Map</h2>
-    <div id="map"></div>
+    <h2>Distribution</h2>
+    <div id="globe"></div>
   </div>
   <div class="panel">
     <h2>Top countries</h2>
@@ -61,9 +58,8 @@
   </div>
 </section>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

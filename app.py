@@ -4,9 +4,20 @@ from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 
+import pycountry
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+
+
+@lru_cache(maxsize=512)
+def iso2_to_iso3(code: str) -> str | None:
+    if not code:
+        return None
+    try:
+        return pycountry.countries.get(alpha_2=code).alpha_3
+    except (AttributeError, LookupError):
+        return None
 
 EXPORT_DIR = Path(
     os.environ.get(
@@ -78,6 +89,12 @@ def snapshot_stats(timestamp: int) -> dict:
     heights_sorted = sorted(heights)
     median_height = heights_sorted[len(heights_sorted) // 2] if heights_sorted else None
 
+    countries_iso3 = []
+    for cc, count in countries.items():
+        iso3 = iso2_to_iso3(cc)
+        if iso3:
+            countries_iso3.append([iso3, count])
+
     return {
         "timestamp": timestamp,
         "total": len(rows),
@@ -88,6 +105,7 @@ def snapshot_stats(timestamp: int) -> dict:
         "top_countries": countries.most_common(15),
         "top_user_agents": user_agents.most_common(15),
         "top_asns": asns.most_common(15),
+        "countries_iso3": countries_iso3,
         "height_histogram": dict(Counter(heights).most_common(10)),
     }
 
