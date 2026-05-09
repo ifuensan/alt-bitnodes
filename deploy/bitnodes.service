@@ -1,0 +1,26 @@
+[Unit]
+Description=Bitnodes crawler stack (crawl + ping + resolve + export + seeder + cache_inv)
+After=network-online.target redis-server.service
+Wants=network-online.target
+Requires=redis-server.service
+
+[Service]
+Type=simple
+User=__USER__
+Group=__USER__
+WorkingDirectory=__CRAWLER_DIR__
+ExecStart=__CRAWLER_DIR__/run-bitnodes.sh
+Restart=on-failure
+RestartSec=10
+KillMode=control-group
+TimeoutStopSec=30
+
+LimitNOFILE=65535
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=__CRAWLER_DIR__
+
+[Install]
+WantedBy=multi-user.target

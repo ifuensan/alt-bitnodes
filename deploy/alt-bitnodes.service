@@ -1,0 +1,22 @@
+[Unit]
+Description=alt-bitnodes dashboard (FastAPI)
+After=network-online.target bitnodes.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+Group=__USER__
+WorkingDirectory=__DASHBOARD_DIR__
+Environment=BITNODES_EXPORT_DIR=__EXPORT_DIR__
+ExecStart=__DASHBOARD_DIR__/venv/bin/uvicorn app:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target
