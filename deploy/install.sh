@@ -34,7 +34,7 @@ install_apt_packages() {
     build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
     libsqlite3-dev libncursesw5-dev xz-utils tk-dev libxml2-dev \
     libxmlsec1-dev libffi-dev liblzma-dev curl wget git ca-certificates \
-    redis-server
+    redis-server tcpdump
   systemctl enable --now redis-server
 }
 
@@ -116,20 +116,28 @@ setup_dashboard() {
     -m venv "${DASHBOARD_DIR}/venv"
   sudo -u "${INSTALL_USER}" "${DASHBOARD_DIR}/venv/bin/pip" install -q --upgrade pip
   sudo -u "${INSTALL_USER}" "${DASHBOARD_DIR}/venv/bin/pip" install -q -r "${DASHBOARD_DIR}/requirements.txt"
+
+  sudo -u "${INSTALL_USER}" mkdir -p "${DASHBOARD_DIR}/data"
 }
 
 install_systemd_units() {
   log "Installing systemd units"
-  install -m 0644 "${DASHBOARD_DIR}/deploy/bitnodes.service" /etc/systemd/system/bitnodes.service
-  install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes.service" /etc/systemd/system/alt-bitnodes.service
+  install -m 0644 "${DASHBOARD_DIR}/deploy/bitnodes.service"      /etc/systemd/system/bitnodes.service
+  install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes.service"  /etc/systemd/system/alt-bitnodes.service
+  install -m 0644 "${DASHBOARD_DIR}/deploy/tcpdump-pcap.service"  /etc/systemd/system/tcpdump-pcap.service
   install -m 0755 "${DASHBOARD_DIR}/deploy/run-bitnodes.sh" "${CRAWLER_DIR}/run-bitnodes.sh"
-  chown "${INSTALL_USER}:${INSTALL_USER}" "${CRAWLER_DIR}/run-bitnodes.sh"
+  install -m 0755 "${DASHBOARD_DIR}/deploy/run-tcpdump.sh"  "${CRAWLER_DIR}/run-tcpdump.sh"
+  chown "${INSTALL_USER}:${INSTALL_USER}" "${CRAWLER_DIR}/run-bitnodes.sh" "${CRAWLER_DIR}/run-tcpdump.sh"
+
+  sudo -u "${INSTALL_USER}" mkdir -p "${CRAWLER_DIR}/data/pcap/f9beb4d9"
 
   sed -i "s|__USER__|${INSTALL_USER}|g; s|__CRAWLER_DIR__|${CRAWLER_DIR}|g; s|__DASHBOARD_DIR__|${DASHBOARD_DIR}|g; s|__EXPORT_DIR__|${CRAWLER_DIR}/data/export/f9beb4d9|g" \
-    /etc/systemd/system/bitnodes.service /etc/systemd/system/alt-bitnodes.service
+    /etc/systemd/system/bitnodes.service /etc/systemd/system/alt-bitnodes.service /etc/systemd/system/tcpdump-pcap.service \
+    "${CRAWLER_DIR}/run-tcpdump.sh"
 
   systemctl daemon-reload
   systemctl enable --now bitnodes.service
+  systemctl enable --now tcpdump-pcap.service
   systemctl enable --now alt-bitnodes.service
 }
 

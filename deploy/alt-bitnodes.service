@@ -9,6 +9,7 @@ User=__USER__
 Group=__USER__
 WorkingDirectory=__DASHBOARD_DIR__
 Environment=BITNODES_EXPORT_DIR=__EXPORT_DIR__
+Environment=RTT_DB_PATH=__DASHBOARD_DIR__/data/rtt.sqlite
 ExecStart=__DASHBOARD_DIR__/venv/bin/uvicorn app:app --host 127.0.0.1 --port 8000
 Restart=on-failure
 RestartSec=5
@@ -17,6 +18,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=full
 ProtectHome=read-only
+ReadWritePaths=__DASHBOARD_DIR__/data
 
 [Install]
 WantedBy=multi-user.target

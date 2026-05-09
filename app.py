@@ -1,7 +1,12 @@
+import asyncio
 import json
+import logging
 import os
+import sqlite3
+import statistics
+import threading
 import time
-from collections import Counter
+from collections import Counter, defaultdict
 from functools import lru_cache
 from pathlib import Path
 
@@ -12,6 +17,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 
+logger = logging.getLogger("alt-bitnodes")
+
 EXPORT_DIR = Path(
     os.environ.get(
         "BITNODES_EXPORT_DIR",
@@ -20,6 +27,14 @@ EXPORT_DIR = Path(
 )
 REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
 OPENDATA_TTL_SECONDS = 10
+
+RTT_DB_PATH = Path(
+    os.environ.get("RTT_DB_PATH", str(EXPORT_DIR.parent / "rtt.sqlite"))
+)
+RTT_INGEST_INTERVAL_SECONDS = int(os.environ.get("RTT_INGEST_INTERVAL_SECONDS", "30"))
+RTT_WINDOW_SECONDS = int(os.environ.get("RTT_WINDOW_SECONDS", "1800"))
+RTT_RETENTION_DAYS = int(os.environ.get("RTT_RETENTION_DAYS", "30"))
+RTT_INGEST_ENABLED = os.environ.get("RTT_INGEST_ENABLED", "true").lower() in ("1", "true", "yes", "on")
 
 FIELDS = [
     "address", "port", "protocol_version", "user_agent", "timestamp",
@@ -151,6 +166,188 @@ def paginate(items: list, page: int, limit: int, base_path: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# RTT history (SQLite)
+# ---------------------------------------------------------------------------
+
+class _MedianAgg:
+    def __init__(self) -> None:
+        self.values: list[int] = []
+
+    def step(self, value) -> None:
+        if value is not None:
+            self.values.append(int(value))
+
+    def finalize(self):
+        if not self.values:
+            return None
+        return int(statistics.median(self.values))
+
+
+_db_lock = threading.Lock()
+
+
+@lru_cache(maxsize=1)
+def _db() -> sqlite3.Connection:
+    RTT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(RTT_DB_PATH), check_same_thread=False, isolation_level=None)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS rtt_samples (
+            address TEXT NOT NULL,
+            port    INTEGER NOT NULL,
+            ts      INTEGER NOT NULL,
+            rtt_ms  INTEGER NOT NULL,
+            PRIMARY KEY (address, port, ts, rtt_ms)
+        ) WITHOUT ROWID;
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_rtt_node_ts ON rtt_samples(address, port, ts DESC);")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_rtt_ts ON rtt_samples(ts);")
+    conn.create_aggregate("median", 1, _MedianAgg)
+    return conn
+
+
+def _parse_rtt_key(key: bytes) -> tuple[str, int] | None:
+    """rtt:<addr>-<port> → (addr, port). addr may contain ':' (IPv6)."""
+    try:
+        s = key.decode("ascii", "replace")
+    except Exception:
+        return None
+    if not s.startswith("rtt:"):
+        return None
+    rest = s[4:]
+    addr, _, port_s = rest.rpartition("-")
+    if not addr or not port_s.isdigit():
+        return None
+    return addr, int(port_s)
+
+
+def ingest_once(redis_conn: redis.Redis, prev_state: dict) -> dict:
+    """Pull fresh RTT samples from Redis into SQLite. Returns updated state."""
+    now = int(time.time())
+    new_state: dict = {}
+    inserts: list[tuple[str, int, int, int]] = []
+
+    cursor = 0
+    while True:
+        cursor, batch = redis_conn.scan(cursor=cursor, match="rtt:*", count=1000)
+        for key in batch:
+            parsed = _parse_rtt_key(key)
+            if parsed is None:
+                continue
+            addr, port = parsed
+            try:
+                items = redis_conn.lrange(key, 0, -1)  # head first (newest)
+            except redis.RedisError:
+                continue
+            if not items:
+                continue
+
+            new_len = len(items)
+            prev_head, prev_len = prev_state.get((addr, port), (None, 0))
+            if prev_head is None:
+                new_count = new_len
+            elif new_len > prev_len:
+                new_count = new_len - prev_len
+            elif items[0] == prev_head:
+                new_count = 0
+            else:
+                try:
+                    new_count = items.index(prev_head)
+                except ValueError:
+                    new_count = new_len
+
+            for v in items[:new_count]:
+                try:
+                    rtt_ms = int(v)
+                except (ValueError, TypeError):
+                    continue
+                inserts.append((addr, port, now, rtt_ms))
+
+            new_state[(addr, port)] = (items[0], new_len)
+        if cursor == 0:
+            break
+
+    if inserts:
+        with _db_lock:
+            _db().executemany(
+                "INSERT OR IGNORE INTO rtt_samples(address, port, ts, rtt_ms) VALUES (?, ?, ?, ?)",
+                inserts,
+            )
+    return new_state
+
+
+def retention_pass() -> int:
+    cutoff = int(time.time()) - RTT_RETENTION_DAYS * 86400
+    with _db_lock:
+        cur = _db().execute("DELETE FROM rtt_samples WHERE ts < ?", (cutoff,))
+        return cur.rowcount or 0
+
+
+def median_rtt_for(addr: str, port: int, window_seconds: int = RTT_WINDOW_SECONDS) -> int | None:
+    cutoff = int(time.time()) - window_seconds
+    row = _db().execute(
+        "SELECT median(rtt_ms) FROM rtt_samples WHERE address=? AND port=? AND ts>=?",
+        (addr, port, cutoff),
+    ).fetchone()
+    return row[0] if row and row[0] is not None else None
+
+
+def medians_in_window(window_seconds: int = RTT_WINDOW_SECONDS) -> dict[tuple[str, int], int]:
+    cutoff = int(time.time()) - window_seconds
+    rows = _db().execute(
+        "SELECT address, port, median(rtt_ms) FROM rtt_samples WHERE ts>=? GROUP BY address, port",
+        (cutoff,),
+    ).fetchall()
+    return {(r[0], r[1]): r[2] for r in rows if r[2] is not None}
+
+
+def samples_for(addr: str, port: int, hours: int) -> list[tuple[int, int]]:
+    cutoff = int(time.time()) - hours * 3600
+    rows = _db().execute(
+        "SELECT ts, rtt_ms FROM rtt_samples WHERE address=? AND port=? AND ts>=? ORDER BY ts ASC",
+        (addr, port, cutoff),
+    ).fetchall()
+    return [(int(r[0]), int(r[1])) for r in rows]
+
+
+_ingest_state: dict = {}
+
+
+async def _ingest_loop() -> None:
+    last_retention = 0
+    while True:
+        try:
+            global _ingest_state
+            _ingest_state = await asyncio.to_thread(ingest_once, _redis(), _ingest_state)
+        except Exception:
+            logger.exception("rtt ingest cycle failed")
+        if time.time() - last_retention > 86400:
+            try:
+                deleted = await asyncio.to_thread(retention_pass)
+                if deleted:
+                    logger.info("rtt retention deleted %d rows", deleted)
+                last_retention = time.time()
+            except Exception:
+                logger.exception("rtt retention pass failed")
+        await asyncio.sleep(RTT_INGEST_INTERVAL_SECONDS)
+
+
+@app.on_event("startup")
+async def _start_rtt_ingest() -> None:
+    _db()  # ensure schema exists even when ingest is disabled
+    if RTT_INGEST_ENABLED:
+        asyncio.create_task(_ingest_loop())
+        logger.info(
+            "rtt ingest started: interval=%ds db=%s", RTT_INGEST_INTERVAL_SECONDS, RTT_DB_PATH
+        )
+    else:
+        logger.info("rtt ingest disabled (RTT_INGEST_ENABLED=false)")
+
+
+# ---------------------------------------------------------------------------
 # Internal API (used by the dashboard frontend)
 # ---------------------------------------------------------------------------
 
@@ -193,6 +390,9 @@ def snapshot_stats(timestamp: int) -> dict:
         if iso3:
             countries_iso3.append([iso3, count])
 
+    medians_now = list(medians_in_window().values())
+    median_latency_ms = int(statistics.median(medians_now)) if medians_now else None
+
     return {
         "timestamp": timestamp,
         "total": len(rows),
@@ -200,6 +400,7 @@ def snapshot_stats(timestamp: int) -> dict:
         "asns_total": len(asns),
         "user_agents_total": len(user_agents),
         "median_height": median_height,
+        "median_latency_ms": median_latency_ms,
         "top_countries": countries.most_common(15),
         "top_user_agents": user_agents.most_common(15),
         "top_asns": asns.most_common(15),
@@ -228,10 +429,7 @@ def latest_stats() -> dict:
 # Public API v1 (bitnodes.io-compatible schema)
 # ---------------------------------------------------------------------------
 
-V1_NOTE = (
-    "bitnodes.io-compatible schema. Note: latency_ms is currently null pending "
-    "RTT persistence (planned phase 2)."
-)
+V1_NOTE = "bitnodes.io-compatible schema."
 
 
 @app.get("/api/v1/snapshots/", tags=["v1"], summary="List snapshots (paginated, newest first)")
@@ -265,11 +463,12 @@ def _v1_snapshot_payload(timestamp: int) -> dict:
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="snapshot not found")
     heights = [r[6] for r in rows if isinstance(r[6], int) and r[6] > 0]
+    medians = medians_in_window()
     nodes: dict[str, list] = {}
     for r in rows:
         # FIELDS: [address, port, proto, ua, timestamp, services, height, ...]
         addr, port, proto, ua, ts, _services, height = r[0], r[1], r[2], r[3], r[4], r[5], r[6]
-        nodes[f"{addr}:{port}"] = [proto, ua, ts, None, height]
+        nodes[f"{addr}:{port}"] = [proto, ua, ts, medians.get((addr, port)), height]
     return {
         "timestamp": timestamp,
         "total_nodes": len(rows),
@@ -335,14 +534,193 @@ def v1_node(node_id: str) -> dict:
         return {
             "address": addr,
             "status": "UP",
-            "data": [proto, ua, last_seen, None, height],
+            "data": [proto, ua, last_seen, median_rtt_for(addr, port), height],
         }
 
     if (addr, port) in known_addresses_set():
         return {
             "address": addr,
             "status": "DOWN",
-            "data": [None, None, None, None, None],
+            "data": [None, None, None, median_rtt_for(addr, port), None],
         }
 
     raise HTTPException(status_code=404, detail="node not found")
+
+
+# ---------------------------------------------------------------------------
+# v1 latency / leaderboard / rankings / groups
+# ---------------------------------------------------------------------------
+
+def _latest_snapshot_rows() -> list[list]:
+    snaps = list_snapshots()
+    if not snaps:
+        raise HTTPException(status_code=404, detail="no snapshots available yet")
+    try:
+        return load_snapshot(snaps[-1])
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="latest snapshot missing on disk")
+
+
+@app.get("/api/v1/nodes/{node_id}/latency/", tags=["v1"], summary="RTT time series for a node")
+def v1_node_latency(
+    node_id: str,
+    hours: int = Query(24, ge=1, le=168),
+) -> dict:
+    try:
+        addr, port = parse_node_id(node_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"invalid node id: {e}")
+
+    known = (addr, port) in known_addresses_set()
+    if not known:
+        row = _db().execute(
+            "SELECT 1 FROM rtt_samples WHERE address=? AND port=? LIMIT 1",
+            (addr, port),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="node not found")
+
+    return {"address": addr, "port": port, "latency": samples_for(addr, port, hours)}
+
+
+@app.get("/api/v1/leaderboard/", tags=["v1"], summary="Fastest nodes by median RTT")
+def v1_leaderboard(
+    country: str | None = Query(None, description="ISO-2 country code filter"),
+    asn: str | None = Query(None, description="ASN filter, e.g. 'AS13335'"),
+    limit: int = Query(50, ge=1, le=500),
+) -> dict:
+    rows = _latest_snapshot_rows()
+    medians = medians_in_window()
+    results: list[dict] = []
+    for r in rows:
+        addr, port = r[0], r[1]
+        latency = medians.get((addr, port))
+        if latency is None:
+            continue
+        node_country = r[9]
+        node_asn = r[13]
+        if country and node_country != country:
+            continue
+        if asn and node_asn != asn:
+            continue
+        results.append({
+            "address": addr,
+            "port": port,
+            "country": node_country,
+            "asn": node_asn,
+            "asn_name": r[14],
+            "user_agent": r[3],
+            "latency_ms": latency,
+        })
+    results.sort(key=lambda x: x["latency_ms"])
+    results = results[:limit]
+    return {"count": len(results), "results": results}
+
+
+def _group_ranking(rows: list[list], key_fn, medians: dict) -> list[dict]:
+    """Group snapshot rows by key_fn(row) → bucket label, return list of buckets."""
+    buckets: dict = defaultdict(list)
+    for r in rows:
+        label = key_fn(r)
+        if label is None or label == "":
+            continue
+        latency = medians.get((r[0], r[1]))
+        buckets[label].append(latency)
+    out: list[dict] = []
+    for label, latencies in buckets.items():
+        present = [v for v in latencies if v is not None]
+        median_val = int(statistics.median(present)) if present else None
+        out.append({"label": label, "total_nodes": len(latencies), "median_rtt_ms": median_val})
+    out.sort(key=lambda x: x["total_nodes"], reverse=True)
+    return out
+
+
+@app.get("/api/v1/rankings/countries/", tags=["v1"], summary="Per-country aggregate")
+def v1_rankings_countries() -> dict:
+    rows = _latest_snapshot_rows()
+    medians = medians_in_window()
+    grouped = _group_ranking(rows, lambda r: r[9], medians)
+    results = [
+        {
+            "country": g["label"],
+            "country_iso3": iso2_to_iso3(g["label"]),
+            "total_nodes": g["total_nodes"],
+            "median_rtt_ms": g["median_rtt_ms"],
+        }
+        for g in grouped
+    ]
+    return {"count": len(results), "results": results}
+
+
+@app.get("/api/v1/rankings/asns/", tags=["v1"], summary="Per-ASN aggregate")
+def v1_rankings_asns() -> dict:
+    rows = _latest_snapshot_rows()
+    medians = medians_in_window()
+    asn_names: dict[str, str] = {}
+    for r in rows:
+        if r[13] and r[13] not in asn_names:
+            asn_names[r[13]] = r[14] or ""
+    grouped = _group_ranking(rows, lambda r: r[13], medians)
+    results = [
+        {
+            "asn": g["label"],
+            "asn_name": asn_names.get(g["label"], ""),
+            "total_nodes": g["total_nodes"],
+            "median_rtt_ms": g["median_rtt_ms"],
+        }
+        for g in grouped
+    ]
+    return {"count": len(results), "results": results}
+
+
+@app.get("/api/v1/rankings/user-agents/", tags=["v1"], summary="Per-user-agent aggregate")
+def v1_rankings_user_agents() -> dict:
+    rows = _latest_snapshot_rows()
+    medians = medians_in_window()
+    grouped = _group_ranking(rows, lambda r: r[3], medians)
+    results = [
+        {
+            "user_agent": g["label"],
+            "total_nodes": g["total_nodes"],
+            "median_rtt_ms": g["median_rtt_ms"],
+        }
+        for g in grouped
+    ]
+    return {"count": len(results), "results": results}
+
+
+@app.get("/api/v1/groups/by-ip/", tags=["v1"], summary="IPs hosting more than one node")
+def v1_groups_by_ip() -> dict:
+    rows = _latest_snapshot_rows()
+    by_addr: dict[str, list[int]] = defaultdict(list)
+    for r in rows:
+        by_addr[r[0]].append(r[1])
+    results = [
+        {"address": a, "total_nodes": len(ports), "ports": sorted(ports)}
+        for a, ports in by_addr.items()
+        if len(ports) >= 2
+    ]
+    results.sort(key=lambda x: x["total_nodes"], reverse=True)
+    return {"count": len(results), "results": results}
+
+
+@app.get("/api/v1/groups/by-ip/{address}/", tags=["v1"], summary="Nodes sharing one IP")
+def v1_group_by_ip_detail(address: str) -> dict:
+    rows = _latest_snapshot_rows()
+    matching = [r for r in rows if r[0] == address]
+    if not matching:
+        raise HTTPException(status_code=404, detail="address not found in latest snapshot")
+    medians = medians_in_window()
+    matching.sort(key=lambda r: r[1])
+    nodes = [
+        {
+            "port": r[1],
+            "user_agent": r[3],
+            "height": r[6],
+            "country": r[9],
+            "asn": r[13],
+            "latency_ms": medians.get((r[0], r[1])),
+        }
+        for r in matching
+    ]
+    return {"address": address, "total_nodes": len(nodes), "nodes": nodes}

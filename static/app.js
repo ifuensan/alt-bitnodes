@@ -109,6 +109,7 @@ async function loadSnapshot(ts) {
   document.getElementById("kpi-countries").textContent = fmt.format(stats.countries_total);
   document.getElementById("kpi-asns").textContent = fmt.format(stats.asns_total);
   document.getElementById("kpi-height").textContent = stats.median_height ?? "—";
+  document.getElementById("kpi-latency").textContent = stats.median_latency_ms ?? "—";
   document.getElementById("snapshot-meta").textContent =
     new Date(ts * 1000).toISOString().replace("T", " ").slice(0, 19) + " UTC";
 
@@ -127,6 +128,24 @@ async function loadSnapshot(ts) {
 
   updateGlobe(stats);
   updateTable(currentNodes);
+  loadLeaderboard().catch(err => console.warn("leaderboard failed", err));
+}
+
+async function loadLeaderboard() {
+  const data = await fetchJSON("/api/v1/leaderboard/?limit=20");
+  const tbody = document.querySelector("#leaderboard-table tbody");
+  tbody.innerHTML = "";
+  if (!data.results.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="7" style="opacity:.6;text-align:center">No RTT samples yet — ingest may not have run, or upstream pong sniffer is offline.</td>`;
+    tbody.appendChild(tr);
+    return;
+  }
+  data.results.forEach((n, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${i + 1}</td><td>${n.address}</td><td>${n.port}</td><td>${n.country ?? ""}</td><td>${n.asn ?? ""}</td><td>${n.user_agent ?? ""}</td><td>${n.latency_ms}</td>`;
+    tbody.appendChild(tr);
+  });
 }
 
 async function init() {

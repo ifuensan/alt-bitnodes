@@ -96,6 +96,69 @@ sudo systemctl stop  bitnodes alt-bitnodes
 sudo systemctl start bitnodes alt-bitnodes
 ```
 
+## RTT history & latency endpoints
+
+The dashboard process maintains a SQLite file populated by an in-process ingest task that copies fresh `rtt:<addr>-<port>` entries out of Redis on a fixed cadence. RTT samples are produced upstream by `bitnodes/cache_inv.py`, which consumes rotating pcap files written by `tcpdump-pcap.service`.
+
+The systemd graph is:
+
+```
+tcpdump-pcap.service  →  data/pcap/f9beb4d9/*.pcap  →  cache_inv (inside bitnodes.service)  →  Redis rtt:*  →  alt-bitnodes ingest  →  data/rtt.sqlite
+```
+
+`tcpdump-pcap.service` runs as root (needs CAP_NET_RAW), drops privileges to the install user via `tcpdump -Z`, auto-detects the default-route interface (do not use `-i any` — that produces LINUX_SLL2 link-layer that `dpkt.ethernet` cannot parse), and applies a Bitcoin-magic-bytes BPF filter so disk usage stays small.
+
+Env vars on the dashboard service (all optional):
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `RTT_DB_PATH` | `<DASHBOARD_DIR>/data/rtt.sqlite` (set in alt-bitnodes.service) | SQLite file location. Parent dir is created if missing. |
+| `RTT_INGEST_INTERVAL_SECONDS` | `30` | Must be < upstream `rtt_ttl` (see `~/bitnodes/conf/ping.conf`) so samples don't expire before ingest. |
+| `RTT_WINDOW_SECONDS` | `1800` | Window over which `latency_ms` is computed (median). |
+| `RTT_RETENTION_DAYS` | `30` | Older samples are pruned daily. |
+| `RTT_INGEST_ENABLED` | `true` | Set `false` on read-only replicas (only one process per DB file should write). |
+
+### Smoke test
+
+After deploy, wait one ingest interval (≥30s) and run:
+
+```bash
+curl -s http://localhost:8000/api/v1/leaderboard/?limit=5 | jq
+curl -s http://localhost:8000/api/v1/rankings/countries/ | jq '.results[:5]'
+curl -s http://localhost:8000/api/v1/rankings/asns/      | jq '.results[:5]'
+curl -s http://localhost:8000/api/v1/rankings/user-agents/ | jq '.results[:5]'
+curl -s http://localhost:8000/api/v1/groups/by-ip/        | jq '.results[:5]'
+NODE=$(curl -s http://localhost:8000/api/v1/snapshots/latest/ | jq -r '.nodes | keys[0]' | sed 's/:/-/')
+curl -s "http://localhost:8000/api/v1/nodes/$NODE/latency/?hours=24" | jq
+sqlite3 "${RTT_DB_PATH:-$HOME/alt-bitnodes/data/rtt.sqlite}" \
+  'SELECT count(*), datetime(min(ts),"unixepoch"), datetime(max(ts),"unixepoch") FROM rtt_samples'
+```
+
+If `leaderboard.results` stays empty for several minutes, walk the chain:
+
+```bash
+systemctl status tcpdump-pcap                         # producer healthy?
+ls ~/bitnodes/data/pcap/f9beb4d9/                     # *.pcap appearing/being consumed
+journalctl -u bitnodes -g cache_inv | tail            # 'pkt=N pong=M' — pong>0 means pcap parses OK
+redis-cli --scan --pattern 'rtt:*' | wc -l            # >0 once cache_inv has produced samples
+journalctl -u alt-bitnodes -g 'rtt ingest' | tail     # ingest is running
+```
+
+`pkt=0` from cache_inv means tcpdump is writing in a link-layer format dpkt cannot parse. Confirm the unit is using a real interface (not `any`); `tcpdump-pcap.service` auto-picks via `ip route get 1.1.1.1`, but you can override with `Environment=TCPDUMP_IFACE=ens5` in `systemctl edit tcpdump-pcap.service`.
+
+### Rollback
+
+```bash
+sudo systemctl stop alt-bitnodes tcpdump-pcap
+# either: keep the DB and disable writes
+sudo systemctl edit alt-bitnodes  # add Environment=RTT_INGEST_ENABLED=false
+# or: drop the DB entirely
+rm ~/alt-bitnodes/data/rtt.sqlite
+sudo systemctl start alt-bitnodes  # leave tcpdump-pcap stopped if you want zero capture
+```
+
+`latency_ms` reverts to `null` in v1 payloads; existing fields keep their shape.
+
 ## Cost notes
 
 - t4g.medium 24/7: ~$24/month.
