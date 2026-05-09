@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bitnodes Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header>
+  <h1>Bitnodes Dashboard</h1>
+  <div class="controls">
+    <label>Snapshot:
+      <select id="snapshot-select"></select>
+    </label>
+    <span id="snapshot-meta"></span>
+  </div>
+</header>
+
+<section class="kpis">
+  <div class="kpi"><span class="value" id="kpi-total">—</span><span class="label">Reachable nodes</span></div>
+  <div class="kpi"><span class="value" id="kpi-countries">—</span><span class="label">Countries</span></div>
+  <div class="kpi"><span class="value" id="kpi-asns">—</span><span class="label">Distinct ASNs</span></div>
+  <div class="kpi"><span class="value" id="kpi-height">—</span><span class="label">Median height</span></div>
+</section>
+
+<section class="grid">
+  <div class="panel map-panel">
+    <h2>Map</h2>
+    <div id="map"></div>
+  </div>
+  <div class="panel">
+    <h2>Top countries</h2>
+    <canvas id="chart-countries"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Top user agents</h2>
+    <canvas id="chart-uas"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Top ASNs</h2>
+    <canvas id="chart-asns"></canvas>
+  </div>
+</section>
+
+<section class="panel table-panel">
+  <h2>Nodes</h2>
+  <input id="filter" placeholder="Filter by IP, country, ASN, user agent…">
+  <div class="table-wrap">
+    <table id="nodes-table">
+      <thead>
+        <tr>
+          <th>IP</th><th>Port</th><th>User agent</th>
+          <th>Country</th><th>City</th><th>ASN</th><th>Height</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
