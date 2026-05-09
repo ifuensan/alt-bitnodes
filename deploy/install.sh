@@ -34,7 +34,7 @@ install_apt_packages() {
     build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
     libsqlite3-dev libncursesw5-dev xz-utils tk-dev libxml2-dev \
     libxmlsec1-dev libffi-dev liblzma-dev curl wget git ca-certificates \
-    redis-server tcpdump
+    redis-server tcpdump sqlite3
   systemctl enable --now redis-server
 }
 
@@ -136,9 +136,10 @@ install_systemd_units() {
     "${CRAWLER_DIR}/run-tcpdump.sh"
 
   systemctl daemon-reload
-  systemctl enable --now bitnodes.service
-  systemctl enable --now tcpdump-pcap.service
-  systemctl enable --now alt-bitnodes.service
+  systemctl enable bitnodes.service tcpdump-pcap.service alt-bitnodes.service
+  # Restart so re-runs pick up unit-file changes (enable --now is a no-op on
+  # already-running services; we explicitly want them to reload config).
+  systemctl restart bitnodes.service tcpdump-pcap.service alt-bitnodes.service
 }
 
 main() {
