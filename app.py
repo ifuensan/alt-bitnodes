@@ -9,6 +9,7 @@ import time
 from collections import Counter, defaultdict
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 import pycountry
 import redis
@@ -434,8 +435,8 @@ V1_NOTE = "bitnodes.io-compatible schema."
 
 @app.get("/api/v1/snapshots/", tags=["v1"], summary="List snapshots (paginated, newest first)")
 def v1_snapshots(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=100),
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
 ) -> dict:
     snaps = sorted(list_snapshots(), reverse=True)
     pag = paginate(snaps, page, limit, "/api/v1/snapshots/")
@@ -492,8 +493,8 @@ def v1_snapshot(timestamp: int) -> dict:
 
 @app.get("/api/v1/addresses/", tags=["v1"], summary="All addresses ever observed")
 def v1_addresses(
-    page: int = Query(1, ge=1),
-    limit: int = Query(10, ge=1, le=1000),
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 10,
 ) -> dict:
     addrs = sorted(known_addresses_set())
     pag = paginate(addrs, page, limit, "/api/v1/addresses/")
@@ -564,7 +565,7 @@ def _latest_snapshot_rows() -> list[list]:
 @app.get("/api/v1/nodes/{node_id}/latency/", tags=["v1"], summary="RTT time series for a node")
 def v1_node_latency(
     node_id: str,
-    hours: int = Query(24, ge=1, le=168),
+    hours: Annotated[int, Query(ge=1, le=168)] = 24,
 ) -> dict:
     try:
         addr, port = parse_node_id(node_id)
@@ -585,9 +586,9 @@ def v1_node_latency(
 
 @app.get("/api/v1/leaderboard/", tags=["v1"], summary="Fastest nodes by median RTT")
 def v1_leaderboard(
-    country: str | None = Query(None, description="ISO-2 country code filter"),
-    asn: str | None = Query(None, description="ASN filter, e.g. 'AS13335'"),
-    limit: int = Query(50, ge=1, le=500),
+    country: Annotated[str | None, Query(description="ISO-2 country code filter")] = None,
+    asn: Annotated[str | None, Query(description="ASN filter, e.g. 'AS13335'")] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
 ) -> dict:
     rows = _latest_snapshot_rows()
     medians = medians_in_window()
