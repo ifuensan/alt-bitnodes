@@ -169,12 +169,30 @@ GET /api/v1/groups/by-ip/              IPs que hospedan más de un nodo
 `RTT_WINDOW_SECONDS` (1800 s por defecto), o `null` si no hay muestras en la
 ventana.
 
+### Geolocalización (GeoIP)
+
+País, ASN, ciudad y zona horaria de cada nodo se resuelven contra las bases
+**MaxMind GeoLite2** (gratuitas) que `bitnodes/resolve.py` consulta en cada
+ciclo:
+
+- `GeoLite2-City.mmdb` — ciudad, lat/lon, zona horaria.
+- `GeoLite2-Country.mmdb` — código ISO de país.
+- `GeoLite2-ASN.mmdb` — ASN y nombre del operador.
+
+Las `.mmdb` viven en `bitnodes/geoip/` y se versionan en git con un snapshot
+inicial. MaxMind republica las bases martes y viernes, así que se quedan
+obsoletas con el tiempo. En producción una unidad systemd
+`geoip-update.timer` las refresca cada miércoles 06:00 UTC ejecutando
+`geoip/update.sh`, que requiere una license key gratuita de MaxMind en
+`bitnodes/geoip/.maxmind_license_key` (ya excluido de git). Detalles y pasos
+de activación en [`deploy/README.md`](deploy/README.md#maxmind-geolite2-refresh).
+
 ### Despliegue
 
 Para AWS (instancia única, Ubuntu 24.04 ARM64) ver [`deploy/README.md`](deploy/README.md):
 crea la instancia, ejecuta `install.sh` (idempotente, instala redis, pyenv,
-clona los dos repos, deja las tres unidades systemd `bitnodes` /
-`tcpdump-pcap` / `alt-bitnodes`).
+clona los dos repos, deja las cuatro unidades systemd `bitnodes` /
+`tcpdump-pcap` / `alt-bitnodes` / `geoip-update.timer`).
 
 El dashboard escucha en `127.0.0.1:8000` y se accede vía túnel SSH:
 
@@ -358,12 +376,30 @@ GET /api/v1/groups/by-ip/              IPs hosting more than one node
 `RTT_WINDOW_SECONDS` (1800 s by default), or `null` when no samples exist
 in the window.
 
+### Geolocation (GeoIP)
+
+Country, ASN, city, and timezone for each node are resolved against the
+**MaxMind GeoLite2** databases (free tier), queried by `bitnodes/resolve.py`
+on every cycle:
+
+- `GeoLite2-City.mmdb` — city, lat/lon, timezone.
+- `GeoLite2-Country.mmdb` — ISO country code.
+- `GeoLite2-ASN.mmdb` — ASN and operator name.
+
+The `.mmdb` files live under `bitnodes/geoip/` and are versioned in git as an
+initial snapshot. MaxMind republishes Tuesdays and Fridays, so the shipped
+copy goes stale. In production a `geoip-update.timer` systemd unit refreshes
+them every Wednesday at 06:00 UTC by running `geoip/update.sh`, which
+requires a free MaxMind license key at `bitnodes/geoip/.maxmind_license_key`
+(already excluded from git). Details and activation steps in
+[`deploy/README.md`](deploy/README.md#maxmind-geolite2-refresh).
+
 ### Deployment
 
 For AWS (single instance, Ubuntu 24.04 ARM64) see
 [`deploy/README.md`](deploy/README.md): create the instance, run `install.sh`
-(idempotent — installs redis, pyenv, clones both repos, drops the three
-systemd units `bitnodes` / `tcpdump-pcap` / `alt-bitnodes`).
+(idempotent — installs redis, pyenv, clones both repos, drops the four
+systemd units `bitnodes` / `tcpdump-pcap` / `alt-bitnodes` / `geoip-update.timer`).
 
 The dashboard listens on `127.0.0.1:8000` and is reached over an SSH tunnel:
 
