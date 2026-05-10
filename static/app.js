@@ -113,9 +113,13 @@ function applyFilter() {
 }
 
 async function loadSnapshot(ts) {
+  const t = Number(ts);
+  if (!Number.isInteger(t) || t < 0) {
+    throw new Error(`invalid snapshot timestamp: ${ts}`);
+  }
   const [snap, stats] = await Promise.all([
-    fetchJSON(`/api/snapshot/${ts}`),
-    fetchJSON(`/api/snapshot/${ts}/stats`),
+    fetchJSON(`/api/snapshot/${t}`),
+    fetchJSON(`/api/snapshot/${t}/stats`),
   ]);
   currentNodes = snap.nodes;
   document.getElementById("kpi-total").textContent = fmt.format(stats.total);
