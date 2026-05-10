@@ -43,11 +43,11 @@ function updateGlobe(stats) {
     font: { color: "#e6edf3" },
   };
   const config = { displayModeBar: false, responsive: true };
-  if (!globeInitialized) {
+  if (globeInitialized) {
+    Plotly.react("globe", data, layout, config);
+  } else {
     Plotly.newPlot("globe", data, layout, config);
     globeInitialized = true;
-  } else {
-    Plotly.react("globe", data, layout, config);
   }
 }
 
@@ -174,7 +174,7 @@ async function init() {
     opt.textContent = new Date(ts * 1000).toISOString().replace("T", " ").slice(0, 19);
     select.appendChild(opt);
   }
-  select.addEventListener("change", e => loadSnapshot(parseInt(e.target.value)));
+  select.addEventListener("change", e => loadSnapshot(Number.parseInt(e.target.value, 10)));
   document.getElementById("filter").addEventListener("input", applyFilter);
 
   if (timestamps.length) {
@@ -183,7 +183,9 @@ async function init() {
   }
 }
 
-init().catch(err => {
+try {
+  await init();
+} catch (err) {
   console.error(err);
   document.getElementById("snapshot-meta").textContent = "error: " + err.message;
-});
+}

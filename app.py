@@ -37,6 +37,11 @@ RTT_WINDOW_SECONDS = int(os.environ.get("RTT_WINDOW_SECONDS", "1800"))
 RTT_RETENTION_DAYS = int(os.environ.get("RTT_RETENTION_DAYS", "30"))
 RTT_INGEST_ENABLED = os.environ.get("RTT_INGEST_ENABLED", "true").lower() in ("1", "true", "yes", "on")
 
+ERR_SNAPSHOT_NOT_FOUND = "snapshot not found"
+ERR_NO_SNAPSHOTS = "no snapshots available yet"
+
+_rtt_ingest_task: asyncio.Task | None = None
+
 FIELDS = [
     "address", "port", "protocol_version", "user_agent", "timestamp",
     "services", "height", "hostname", "city", "country",
@@ -340,7 +345,8 @@ async def _ingest_loop() -> None:
 async def _start_rtt_ingest() -> None:
     _db()  # ensure schema exists even when ingest is disabled
     if RTT_INGEST_ENABLED:
-        asyncio.create_task(_ingest_loop())
+        global _rtt_ingest_task
+        _rtt_ingest_task = asyncio.create_task(_ingest_loop())
         logger.info(
             "rtt ingest started: interval=%ds db=%s", RTT_INGEST_INTERVAL_SECONDS, RTT_DB_PATH
         )
@@ -367,7 +373,7 @@ def snapshot(timestamp: int) -> dict:
     try:
         rows = load_snapshot(timestamp)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="snapshot not found")
+        raise HTTPException(status_code=404, detail=ERR_SNAPSHOT_NOT_FOUND)
     return {"timestamp": timestamp, "count": len(rows), "nodes": [to_dict(r) for r in rows]}
 
 
@@ -376,7 +382,7 @@ def snapshot_stats(timestamp: int) -> dict:
     try:
         rows = load_snapshot(timestamp)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="snapshot not found")
+        raise HTTPException(status_code=404, detail=ERR_SNAPSHOT_NOT_FOUND)
 
     countries = Counter(r[9] for r in rows if r[9])
     user_agents = Counter(r[3] for r in rows if r[3])
@@ -414,7 +420,7 @@ def snapshot_stats(timestamp: int) -> dict:
 def latest() -> dict:
     snaps = list_snapshots()
     if not snaps:
-        raise HTTPException(status_code=404, detail="no snapshots available yet")
+        raise HTTPException(status_code=404, detail=ERR_NO_SNAPSHOTS)
     return snapshot(snaps[-1])
 
 
@@ -422,7 +428,7 @@ def latest() -> dict:
 def latest_stats() -> dict:
     snaps = list_snapshots()
     if not snaps:
-        raise HTTPException(status_code=404, detail="no snapshots available yet")
+        raise HTTPException(status_code=404, detail=ERR_NO_SNAPSHOTS)
     return snapshot_stats(snaps[-1])
 
 
@@ -462,7 +468,7 @@ def _v1_snapshot_payload(timestamp: int) -> dict:
     try:
         rows = load_snapshot(timestamp)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="snapshot not found")
+        raise HTTPException(status_code=404, detail=ERR_SNAPSHOT_NOT_FOUND)
     heights = [r[6] for r in rows if isinstance(r[6], int) and r[6] > 0]
     medians = medians_in_window()
     nodes: dict[str, list] = {}
@@ -482,7 +488,7 @@ def _v1_snapshot_payload(timestamp: int) -> dict:
 def v1_snapshot_latest() -> dict:
     snaps = list_snapshots()
     if not snaps:
-        raise HTTPException(status_code=404, detail="no snapshots available yet")
+        raise HTTPException(status_code=404, detail=ERR_NO_SNAPSHOTS)
     return _v1_snapshot_payload(snaps[-1])
 
 
@@ -555,7 +561,7 @@ def v1_node(node_id: str) -> dict:
 def _latest_snapshot_rows() -> list[list]:
     snaps = list_snapshots()
     if not snaps:
-        raise HTTPException(status_code=404, detail="no snapshots available yet")
+        raise HTTPException(status_code=404, detail=ERR_NO_SNAPSHOTS)
     try:
         return load_snapshot(snaps[-1])
     except FileNotFoundError:

@@ -9,7 +9,7 @@ req() {
   local method=$1 path=$2 expect=${3:-200}
   local code
   code=$(curl -s -o /tmp/smoke.body -w '%{http_code}' "$BASE$path")
-  if [ "$code" != "$expect" ]; then
+  if [[ "$code" != "$expect" ]]; then
     echo "FAIL $method $path: got $code, expected $expect"
     cat /tmp/smoke.body; echo
     return 1
