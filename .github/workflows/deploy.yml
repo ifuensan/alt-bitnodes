@@ -38,7 +38,16 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
         run: |
-          code=$(ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$EC2_USER@$EC2_HOST" \
-            'curl -fsS -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/')
-          echo "HTTP $code"
-          [ "$code" = "200" ]
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$EC2_USER@$EC2_HOST" '
+            for i in 1 2 3 4 5; do
+              code=$(curl -fsS -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:8000/ || true)
+              echo "attempt $i: HTTP ${code:-none}"
+              [ "$code" = "200" ] && exit 0
+              sleep 2
+            done
+            echo "---- systemctl status alt-bitnodes ----"
+            sudo systemctl status alt-bitnodes --no-pager -n 30 || true
+            echo "---- journalctl -u alt-bitnodes -n 50 ----"
+            sudo journalctl -u alt-bitnodes -n 50 --no-pager || true
+            exit 1
+          '
