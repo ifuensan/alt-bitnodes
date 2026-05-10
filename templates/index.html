@@ -31,15 +31,15 @@
   </div>
   <div class="panel">
     <h2>Top countries</h2>
-    <canvas id="chart-countries"></canvas>
+    <div id="chart-countries" class="plot"></div>
   </div>
   <div class="panel">
     <h2>Top user agents</h2>
-    <canvas id="chart-uas"></canvas>
+    <div id="chart-uas" class="plot"></div>
   </div>
   <div class="panel">
     <h2>Top ASNs</h2>
-    <canvas id="chart-asns"></canvas>
+    <div id="chart-asns" class="plot"></div>
   </div>
 </section>
 
@@ -73,8 +73,9 @@
   </div>
 </section>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<script src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

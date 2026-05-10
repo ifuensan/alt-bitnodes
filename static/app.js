@@ -1,5 +1,4 @@
 const fmt = new Intl.NumberFormat("en-US");
-let charts = {};
 let currentNodes = [];
 let globeInitialized = false;
 
@@ -52,21 +51,35 @@ function updateGlobe(stats) {
   }
 }
 
-function makeBarChart(canvasId, labels, values, label) {
-  if (charts[canvasId]) charts[canvasId].destroy();
-  charts[canvasId] = new Chart(document.getElementById(canvasId), {
-    type: "bar",
-    data: { labels, datasets: [{ label, data: values, backgroundColor: "#f7931a" }] },
-    options: {
-      indexAxis: "y",
-      responsive: true,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { color: "#8b949e" }, grid: { color: "#2d333b" } },
-        y: { ticks: { color: "#e6edf3" }, grid: { display: false } },
-      },
-    },
+function makeBarChart(containerId, labels, values, label) {
+  const el = document.getElementById(containerId);
+  const data = labels.map((l, i) => ({ label: l, value: values[i] }));
+  const marginLeft = containerId === "chart-countries" ? 80 : 260;
+  const chart = Plot.plot({
+    height: 240,
+    marginLeft,
+    marginRight: 24,
+    x: { grid: true, label },
+    y: { label: null },
+    style: { background: "transparent", color: "#e6edf3", fontSize: "12px" },
+    marks: [
+      Plot.barX(data, {
+        x: "value",
+        y: "label",
+        fill: "#f7931a",
+        sort: { y: "x", reverse: true },
+      }),
+      Plot.tip(data, Plot.pointerY({
+        x: "value",
+        y: "label",
+        fill: "#0e1116",
+        stroke: "#2d333b",
+        textPadding: 8,
+      })),
+      Plot.ruleX([0], { stroke: "#2d333b" }),
+    ],
   });
+  el.replaceChildren(chart);
 }
 
 function updateTable(nodes) {
@@ -118,11 +131,11 @@ async function loadSnapshot(ts) {
     stats.top_countries.map(([, v]) => v),
     "nodes");
   makeBarChart("chart-uas",
-    stats.top_user_agents.map(([k]) => k.length > 32 ? k.slice(0, 30) + "…" : k),
+    stats.top_user_agents.map(([k]) => k.length > 56 ? k.slice(0, 54) + "…" : k),
     stats.top_user_agents.map(([, v]) => v),
     "nodes");
   makeBarChart("chart-asns",
-    stats.top_asns.map(([k]) => k.length > 32 ? k.slice(0, 30) + "…" : k),
+    stats.top_asns.map(([k]) => k.length > 56 ? k.slice(0, 54) + "…" : k),
     stats.top_asns.map(([, v]) => v),
     "nodes");
 
