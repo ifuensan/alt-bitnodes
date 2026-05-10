@@ -1,0 +1,14 @@
+[Unit]
+Description=Weekly MaxMind GeoLite2 refresh
+Documentation=https://dev.maxmind.com/geoip/updating-databases
+
+[Timer]
+# MaxMind publishes Tue and Fri; running Wed catches the Tue release with
+# a 30-min jitter to be polite. Persistent=true reruns if the box was off
+# at the scheduled moment.
+OnCalendar=Wed *-*-* 06:00:00
+RandomizedDelaySec=1800
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -29,7 +29,7 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
 OPENDATA_TTL_SECONDS = 10
 
 RTT_DB_PATH = Path(
-    os.environ.get("RTT_DB_PATH", str(EXPORT_DIR.parent / "rtt.sqlite"))
+    os.environ.get("RTT_DB_PATH", str(Path(__file__).resolve().parent / "data" / "rtt.sqlite"))
 )
 RTT_INGEST_INTERVAL_SECONDS = int(os.environ.get("RTT_INGEST_INTERVAL_SECONDS", "30"))
 RTT_WINDOW_SECONDS = int(os.environ.get("RTT_WINDOW_SECONDS", "1800"))

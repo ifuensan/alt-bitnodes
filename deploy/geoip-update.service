@@ -1,0 +1,17 @@
+[Unit]
+Description=Update MaxMind GeoLite2 databases (City, Country, ASN)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+Group=__USER__
+WorkingDirectory=__CRAWLER_DIR__/geoip
+ExecStart=__CRAWLER_DIR__/geoip/update.sh
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=__CRAWLER_DIR__/geoip

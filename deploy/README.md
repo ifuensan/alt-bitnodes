@@ -96,6 +96,27 @@ sudo systemctl stop  bitnodes alt-bitnodes
 sudo systemctl start bitnodes alt-bitnodes
 ```
 
+## MaxMind GeoLite2 refresh
+
+The crawler resolves country, ASN, and city for each peer via MaxMind GeoLite2 databases under `~/bitnodes/geoip/`. The repo ships a recent snapshot of the three `.mmdb` files, but they go stale (MaxMind republishes Tue/Fri). A weekly `geoip-update.timer` is installed; it only runs if a license key is present.
+
+```bash
+# 1. Get a free license: https://www.maxmind.com/en/accounts/current/license-key
+# 2. Drop it into the crawler's geoip dir, mode 600
+echo 'YOUR_KEY' | sudo -u ubuntu tee ~/bitnodes/geoip/.maxmind_license_key
+sudo chmod 600 ~/bitnodes/geoip/.maxmind_license_key
+
+# 3. Re-run the installer; it enables the timer
+sudo bash ~/alt-bitnodes/deploy/install.sh
+
+# 4. Verify
+systemctl list-timers geoip-update.timer
+sudo systemctl start geoip-update.service   # one-off run to validate the key
+ls -la ~/bitnodes/geoip/*.mmdb              # mtime should refresh
+```
+
+The timer runs every Wednesday at 06:00 with up to 30 min jitter. `Persistent=true` reruns missed cycles when the box was off. To check the last run: `journalctl -u geoip-update.service`.
+
 ## RTT history & latency endpoints
 
 The dashboard process maintains a SQLite file populated by an in-process ingest task that copies fresh `rtt:<addr>-<port>` entries out of Redis on a fixed cadence. RTT samples are produced upstream by `bitnodes/cache_inv.py`, which consumes rotating pcap files written by `tcpdump-pcap.service`.

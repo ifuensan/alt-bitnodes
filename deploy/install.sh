@@ -122,9 +122,11 @@ setup_dashboard() {
 
 install_systemd_units() {
   log "Installing systemd units"
-  install -m 0644 "${DASHBOARD_DIR}/deploy/bitnodes.service"      /etc/systemd/system/bitnodes.service
-  install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes.service"  /etc/systemd/system/alt-bitnodes.service
-  install -m 0644 "${DASHBOARD_DIR}/deploy/tcpdump-pcap.service"  /etc/systemd/system/tcpdump-pcap.service
+  install -m 0644 "${DASHBOARD_DIR}/deploy/bitnodes.service"        /etc/systemd/system/bitnodes.service
+  install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes.service"    /etc/systemd/system/alt-bitnodes.service
+  install -m 0644 "${DASHBOARD_DIR}/deploy/tcpdump-pcap.service"    /etc/systemd/system/tcpdump-pcap.service
+  install -m 0644 "${DASHBOARD_DIR}/deploy/geoip-update.service"    /etc/systemd/system/geoip-update.service
+  install -m 0644 "${DASHBOARD_DIR}/deploy/geoip-update.timer"      /etc/systemd/system/geoip-update.timer
   install -m 0755 "${DASHBOARD_DIR}/deploy/run-bitnodes.sh" "${CRAWLER_DIR}/run-bitnodes.sh"
   install -m 0755 "${DASHBOARD_DIR}/deploy/run-tcpdump.sh"  "${CRAWLER_DIR}/run-tcpdump.sh"
   chown "${INSTALL_USER}:${INSTALL_USER}" "${CRAWLER_DIR}/run-bitnodes.sh" "${CRAWLER_DIR}/run-tcpdump.sh"
@@ -133,6 +135,7 @@ install_systemd_units() {
 
   sed -i "s|__USER__|${INSTALL_USER}|g; s|__CRAWLER_DIR__|${CRAWLER_DIR}|g; s|__DASHBOARD_DIR__|${DASHBOARD_DIR}|g; s|__EXPORT_DIR__|${CRAWLER_DIR}/data/export/f9beb4d9|g" \
     /etc/systemd/system/bitnodes.service /etc/systemd/system/alt-bitnodes.service /etc/systemd/system/tcpdump-pcap.service \
+    /etc/systemd/system/geoip-update.service \
     "${CRAWLER_DIR}/run-tcpdump.sh"
 
   systemctl daemon-reload
@@ -140,6 +143,21 @@ install_systemd_units() {
   # Restart so re-runs pick up unit-file changes (enable --now is a no-op on
   # already-running services; we explicitly want them to reload config).
   systemctl restart bitnodes.service tcpdump-pcap.service alt-bitnodes.service
+
+  # GeoIP timer only when license key is present. Idempotent: re-running
+  # install.sh after the operator drops the key picks it up.
+  if [[ -s "${CRAWLER_DIR}/geoip/.maxmind_license_key" ]]; then
+    log "MaxMind license key found; enabling weekly GeoIP refresh"
+    systemctl enable --now geoip-update.timer
+  else
+    log "No MaxMind license key at ${CRAWLER_DIR}/geoip/.maxmind_license_key"
+    echo "    GeoLite2 .mmdb files will go stale. To enable weekly refresh:"
+    echo "      1. Get a free license: https://www.maxmind.com/en/accounts/current/license-key"
+    echo "      2. echo 'YOUR_KEY' | sudo -u ${INSTALL_USER} tee ${CRAWLER_DIR}/geoip/.maxmind_license_key"
+    echo "      3. sudo chmod 600 ${CRAWLER_DIR}/geoip/.maxmind_license_key"
+    echo "      4. Re-run this installer (it'll enable geoip-update.timer)."
+    systemctl disable geoip-update.timer 2>/dev/null || true
+  fi
 }
 
 main() {
