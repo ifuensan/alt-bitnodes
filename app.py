@@ -230,6 +230,47 @@ def _parse_rtt_key(key: bytes) -> tuple[str, int] | None:
     return addr, int(port_s)
 
 
+def _count_new_rtts(items: list, prev_head, prev_len: int) -> int:
+    new_len = len(items)
+    if prev_head is None:
+        return new_len
+    if new_len > prev_len:
+        return new_len - prev_len
+    if items[0] == prev_head:
+        return 0
+    try:
+        return items.index(prev_head)
+    except ValueError:
+        return new_len
+
+
+def _process_rtt_key(
+    redis_conn: redis.Redis, key, prev_state: dict, now: int, inserts: list, new_state: dict
+) -> None:
+    parsed = _parse_rtt_key(key)
+    if parsed is None:
+        return
+    addr, port = parsed
+    try:
+        items = redis_conn.lrange(key, 0, -1)  # head first (newest)
+    except redis.RedisError:
+        return
+    if not items:
+        return
+
+    prev_head, prev_len = prev_state.get((addr, port), (None, 0))
+    new_count = _count_new_rtts(items, prev_head, prev_len)
+
+    for v in items[:new_count]:
+        try:
+            rtt_ms = int(v)
+        except (ValueError, TypeError):
+            continue
+        inserts.append((addr, port, now, rtt_ms))
+
+    new_state[(addr, port)] = (items[0], len(items))
+
+
 def ingest_once(redis_conn: redis.Redis, prev_state: dict) -> dict:
     """Pull fresh RTT samples from Redis into SQLite. Returns updated state."""
     now = int(time.time())
@@ -240,39 +281,7 @@ def ingest_once(redis_conn: redis.Redis, prev_state: dict) -> dict:
     while True:
         cursor, batch = redis_conn.scan(cursor=cursor, match="rtt:*", count=1000)
         for key in batch:
-            parsed = _parse_rtt_key(key)
-            if parsed is None:
-                continue
-            addr, port = parsed
-            try:
-                items = redis_conn.lrange(key, 0, -1)  # head first (newest)
-            except redis.RedisError:
-                continue
-            if not items:
-                continue
-
-            new_len = len(items)
-            prev_head, prev_len = prev_state.get((addr, port), (None, 0))
-            if prev_head is None:
-                new_count = new_len
-            elif new_len > prev_len:
-                new_count = new_len - prev_len
-            elif items[0] == prev_head:
-                new_count = 0
-            else:
-                try:
-                    new_count = items.index(prev_head)
-                except ValueError:
-                    new_count = new_len
-
-            for v in items[:new_count]:
-                try:
-                    rtt_ms = int(v)
-                except (ValueError, TypeError):
-                    continue
-                inserts.append((addr, port, now, rtt_ms))
-
-            new_state[(addr, port)] = (items[0], new_len)
+            _process_rtt_key(redis_conn, key, prev_state, now, inserts, new_state)
         if cursor == 0:
             break
 
@@ -368,7 +377,7 @@ def snapshots() -> dict:
     return {"timestamps": list_snapshots(), "export_dir": str(EXPORT_DIR)}
 
 
-@app.get("/api/snapshot/{timestamp}")
+@app.get("/api/snapshot/{timestamp}", responses={404: {"description": ERR_SNAPSHOT_NOT_FOUND}})
 def snapshot(timestamp: int) -> dict:
     try:
         rows = load_snapshot(timestamp)
@@ -377,7 +386,7 @@ def snapshot(timestamp: int) -> dict:
     return {"timestamp": timestamp, "count": len(rows), "nodes": [to_dict(r) for r in rows]}
 
 
-@app.get("/api/snapshot/{timestamp}/stats")
+@app.get("/api/snapshot/{timestamp}/stats", responses={404: {"description": ERR_SNAPSHOT_NOT_FOUND}})
 def snapshot_stats(timestamp: int) -> dict:
     try:
         rows = load_snapshot(timestamp)
@@ -416,7 +425,7 @@ def snapshot_stats(timestamp: int) -> dict:
     }
 
 
-@app.get("/api/latest")
+@app.get("/api/latest", responses={404: {"description": ERR_NO_SNAPSHOTS}})
 def latest() -> dict:
     snaps = list_snapshots()
     if not snaps:
@@ -424,7 +433,7 @@ def latest() -> dict:
     return snapshot(snaps[-1])
 
 
-@app.get("/api/latest/stats")
+@app.get("/api/latest/stats", responses={404: {"description": ERR_NO_SNAPSHOTS}})
 def latest_stats() -> dict:
     snaps = list_snapshots()
     if not snaps:
@@ -484,7 +493,8 @@ def _v1_snapshot_payload(timestamp: int) -> dict:
     }
 
 
-@app.get("/api/v1/snapshots/latest/", tags=["v1"], summary="Latest snapshot (full node dump)")
+@app.get("/api/v1/snapshots/latest/", tags=["v1"], summary="Latest snapshot (full node dump)",
+         responses={404: {"description": ERR_NO_SNAPSHOTS}})
 def v1_snapshot_latest() -> dict:
     snaps = list_snapshots()
     if not snaps:
@@ -492,7 +502,8 @@ def v1_snapshot_latest() -> dict:
     return _v1_snapshot_payload(snaps[-1])
 
 
-@app.get("/api/v1/snapshots/{timestamp}/", tags=["v1"], summary="Specific snapshot (full node dump)")
+@app.get("/api/v1/snapshots/{timestamp}/", tags=["v1"], summary="Specific snapshot (full node dump)",
+         responses={404: {"description": ERR_SNAPSHOT_NOT_FOUND}})
 def v1_snapshot(timestamp: int) -> dict:
     return _v1_snapshot_payload(timestamp)
 
@@ -512,37 +523,42 @@ def v1_addresses(
     }
 
 
-@app.get("/api/v1/nodes/{node_id}/", tags=["v1"], summary="Current status of a node")
+def _node_height(addr: str, port: int, services) -> int | None:
+    if services is None:
+        return None
+    try:
+        raw = _redis().get(f"height:{addr}-{port}-{services}")
+        return int(raw) if raw is not None else None
+    except (redis.RedisError, ValueError):
+        return None
+
+
+def _node_up_payload(item, addr: str, port: int) -> dict:
+    # data layout (from ping.py opendata zset):
+    #   [addr, port, protocol_version, user_agent, last_seen, services]
+    data, _score = item
+    proto = data[2] if len(data) > 2 else None
+    ua = data[3] if len(data) > 3 else None
+    last_seen = int(data[4]) if len(data) > 4 else None
+    services = data[5] if len(data) > 5 else None
+    return {
+        "address": addr,
+        "status": "UP",
+        "data": [proto, ua, last_seen, median_rtt_for(addr, port), _node_height(addr, port, services)],
+    }
+
+
+@app.get("/api/v1/nodes/{node_id}/", tags=["v1"], summary="Current status of a node",
+         responses={400: {"description": "invalid node id"}, 404: {"description": "node not found"}})
 def v1_node(node_id: str) -> dict:
     try:
         addr, port = parse_node_id(node_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"invalid node id: {e}")
 
-    key = f"{addr}:{port}"
-    idx = opendata_index()
-    item = idx.get(key)
+    item = opendata_index().get(f"{addr}:{port}")
     if item is not None:
-        data, _score = item
-        # data layout (from ping.py opendata zset):
-        #   [addr, port, protocol_version, user_agent, last_seen, services]
-        proto = data[2] if len(data) > 2 else None
-        ua = data[3] if len(data) > 3 else None
-        last_seen = int(data[4]) if len(data) > 4 else None
-        services = data[5] if len(data) > 5 else None
-        height = None
-        if services is not None:
-            try:
-                raw = _redis().get(f"height:{addr}-{port}-{services}")
-                if raw is not None:
-                    height = int(raw)
-            except (redis.RedisError, ValueError):
-                pass
-        return {
-            "address": addr,
-            "status": "UP",
-            "data": [proto, ua, last_seen, median_rtt_for(addr, port), height],
-        }
+        return _node_up_payload(item, addr, port)
 
     if (addr, port) in known_addresses_set():
         return {
@@ -568,7 +584,8 @@ def _latest_snapshot_rows() -> list[list]:
         raise HTTPException(status_code=404, detail="latest snapshot missing on disk")
 
 
-@app.get("/api/v1/nodes/{node_id}/latency/", tags=["v1"], summary="RTT time series for a node")
+@app.get("/api/v1/nodes/{node_id}/latency/", tags=["v1"], summary="RTT time series for a node",
+         responses={400: {"description": "invalid node id"}, 404: {"description": "node not found"}})
 def v1_node_latency(
     node_id: str,
     hours: Annotated[int, Query(ge=1, le=168)] = 24,
@@ -590,7 +607,8 @@ def v1_node_latency(
     return {"address": addr, "port": port, "latency": samples_for(addr, port, hours)}
 
 
-@app.get("/api/v1/leaderboard/", tags=["v1"], summary="Fastest nodes by median RTT")
+@app.get("/api/v1/leaderboard/", tags=["v1"], summary="Fastest nodes by median RTT",
+         responses={404: {"description": ERR_NO_SNAPSHOTS}})
 def v1_leaderboard(
     country: Annotated[str | None, Query(description="ISO-2 country code filter")] = None,
     asn: Annotated[str | None, Query(description="ASN filter, e.g. 'AS13335'")] = None,
@@ -642,7 +660,8 @@ def _group_ranking(rows: list[list], key_fn, medians: dict) -> list[dict]:
     return out
 
 
-@app.get("/api/v1/rankings/countries/", tags=["v1"], summary="Per-country aggregate")
+@app.get("/api/v1/rankings/countries/", tags=["v1"], summary="Per-country aggregate",
+         responses={404: {"description": ERR_NO_SNAPSHOTS}})
 def v1_rankings_countries() -> dict:
     rows = _latest_snapshot_rows()
     medians = medians_in_window()
@@ -659,7 +678,8 @@ def v1_rankings_countries() -> dict:
     return {"count": len(results), "results": results}
 
 
-@app.get("/api/v1/rankings/asns/", tags=["v1"], summary="Per-ASN aggregate")
+@app.get("/api/v1/rankings/asns/", tags=["v1"], summary="Per-ASN aggregate",
+         responses={404: {"description": ERR_NO_SNAPSHOTS}})
 def v1_rankings_asns() -> dict:
     rows = _latest_snapshot_rows()
     medians = medians_in_window()
@@ -680,7 +700,8 @@ def v1_rankings_asns() -> dict:
     return {"count": len(results), "results": results}
 
 
-@app.get("/api/v1/rankings/user-agents/", tags=["v1"], summary="Per-user-agent aggregate")
+@app.get("/api/v1/rankings/user-agents/", tags=["v1"], summary="Per-user-agent aggregate",
+         responses={404: {"description": ERR_NO_SNAPSHOTS}})
 def v1_rankings_user_agents() -> dict:
     rows = _latest_snapshot_rows()
     medians = medians_in_window()
@@ -696,7 +717,8 @@ def v1_rankings_user_agents() -> dict:
     return {"count": len(results), "results": results}
 
 
-@app.get("/api/v1/groups/by-ip/", tags=["v1"], summary="IPs hosting more than one node")
+@app.get("/api/v1/groups/by-ip/", tags=["v1"], summary="IPs hosting more than one node",
+         responses={404: {"description": ERR_NO_SNAPSHOTS}})
 def v1_groups_by_ip() -> dict:
     rows = _latest_snapshot_rows()
     by_addr: dict[str, list[int]] = defaultdict(list)
@@ -711,7 +733,8 @@ def v1_groups_by_ip() -> dict:
     return {"count": len(results), "results": results}
 
 
-@app.get("/api/v1/groups/by-ip/{address}/", tags=["v1"], summary="Nodes sharing one IP")
+@app.get("/api/v1/groups/by-ip/{address}/", tags=["v1"], summary="Nodes sharing one IP",
+         responses={404: {"description": "address not found in latest snapshot"}})
 def v1_group_by_ip_detail(address: str) -> dict:
     rows = _latest_snapshot_rows()
     matching = [r for r in rows if r[0] == address]
