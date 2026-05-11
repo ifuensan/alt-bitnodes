@@ -1,7 +1,7 @@
 [Unit]
 Description=Bitnodes crawler stack (crawl + ping + resolve + export + seeder + cache_inv)
 After=network-online.target redis-server.service
-Wants=network-online.target
+Wants=network-online.target tcpdump-pcap.service
 Requires=redis-server.service
 
 [Service]
