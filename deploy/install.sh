@@ -34,8 +34,9 @@ install_apt_packages() {
     build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
     libsqlite3-dev libncursesw5-dev xz-utils tk-dev libxml2-dev \
     libxmlsec1-dev libffi-dev liblzma-dev curl wget git ca-certificates \
-    redis-server tcpdump sqlite3
+    redis-server tcpdump sqlite3 tor
   systemctl enable --now redis-server
+  systemctl enable --now tor
 }
 
 install_pyenv() {
@@ -103,6 +104,7 @@ setup_crawler() {
 
   for cfg in "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf"; do
     sudo -u "${INSTALL_USER}" sed -i "s|^user_agent = .*|user_agent = ${USER_AGENT}|" "${cfg}"
+    sudo -u "${INSTALL_USER}" sed -i "s|^tor_proxies =.*|tor_proxies = 127.0.0.1:9050|" "${cfg}"
   done
 
   sudo -u "${INSTALL_USER}" mkdir -p "${CRAWLER_DIR}/log" "${CRAWLER_DIR}/data"
