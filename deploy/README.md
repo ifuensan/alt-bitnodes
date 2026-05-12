@@ -180,6 +180,140 @@ sudo systemctl start alt-bitnodes  # leave tcpdump-pcap stopped if you want zero
 
 `latency_ms` reverts to `null` in v1 payloads; existing fields keep their shape.
 
+## Public edge (CloudFront + nginx)
+
+Until now the dashboard lives on `127.0.0.1:8000` and is reachable only via SSH
+tunnel. To expose it publicly the path is **CloudFront → EC2:80 (nginx) →
+uvicorn:8000**: TLS lives on CloudFront, the EC2 only accepts traffic from
+CloudFront IPs that carry the right secret header.
+
+### Prerequisites
+
+- AWS CLI configured with permissions for `acm:*`, `cloudfront:*`,
+  `ec2:AuthorizeSecurityGroupIngress`, `ec2:RevokeSecurityGroupIngress`,
+  `cloudformation:*`. A local profile pointing at `us-east-1` works fine.
+- The EC2 instance already exists, its public IP is known, and its security
+  group ID is known (`aws ec2 describe-instances --instance-ids <id>`).
+- Access to the external DNS provider for `hacknodes.xyz` (Namecheap/GoDaddy
+  /etc.) so you can create CNAME and A records by hand.
+
+### One-time bootstrap
+
+```bash
+# 1. Generate the shared origin-auth secret locally.
+openssl rand -hex 32 > /tmp/origin-secret
+
+# 2. Deploy the CloudFormation stack. Stays CREATE_IN_PROGRESS until ACM
+#    validation CNAMEs are created — that's expected.
+aws cloudformation deploy \
+  --region us-east-1 \
+  --stack-name alt-bitnodes-edge \
+  --template-file deploy/cloudformation/edge.yaml \
+  --parameter-overrides \
+      DomainName=pesquisa.hacknodes.xyz \
+      OriginHostname=origin.hacknodes.xyz \
+      OriginAuthSecret=$(cat /tmp/origin-secret) \
+      OriginEc2SecurityGroupId=<sg-xxxxxxxx> \
+  --capabilities CAPABILITY_NAMED_IAM
+
+# 3. Grab the ACM validation CNAMEs (Name/Value pairs) and create them
+#    in the external DNS provider; the stack will finish once ACM sees them.
+aws acm describe-certificate --region us-east-1 \
+  --certificate-arn $(aws cloudformation describe-stacks --region us-east-1 \
+      --stack-name alt-bitnodes-edge \
+      --query 'Stacks[0].Outputs[?OutputKey==`AcmCertificateArn`].OutputValue' \
+      --output text) \
+  --query 'Certificate.DomainValidationOptions[].ResourceRecord'
+
+# 4. Wait for CREATE_COMPLETE, then read the CloudFront hostname.
+aws cloudformation describe-stacks --region us-east-1 \
+  --stack-name alt-bitnodes-edge \
+  --query 'Stacks[0].Outputs'
+```
+
+### DNS records to create in the external provider
+
+| Type  | Name (host)                          | Value                              | Purpose                       |
+|-------|--------------------------------------|------------------------------------|-------------------------------|
+| CNAME | `<random>._<random>.hacknodes.xyz`   | `<random>.acm-validations.aws.`    | ACM domain validation         |
+| A     | `origin.hacknodes.xyz`               | EC2 public IP (`100.50.100.201`)   | CloudFront origin lookup      |
+| CNAME | `pesquisa.hacknodes.xyz`             | `dxxxx.cloudfront.net`             | Public hostname → CloudFront  |
+
+The ACM CNAME comes from step 3 above. The CloudFront hostname comes from the
+stack output `CloudFrontDomain`.
+
+### Push the secret to the EC2
+
+```bash
+SECRET=$(cat /tmp/origin-secret)
+ssh -i $PEM_HNL ubuntu@<ec2-ip> "sudo install -d -m 0750 /etc/alt-bitnodes && \
+  echo 'ORIGIN_AUTH_SECRET=${SECRET}' | sudo tee /etc/alt-bitnodes/origin-auth.env >/dev/null && \
+  sudo chmod 0600 /etc/alt-bitnodes/origin-auth.env"
+```
+
+Then push to `main` (or trigger the deploy workflow) so `install.sh` runs and
+configures nginx with the secret already in place. If you skip this step
+`install.sh` will generate its own secret on first boot — fine for a brand-new
+instance, but you'd then need to read it back and update the CloudFormation
+parameter to match.
+
+### Smoke tests after deploy
+
+```bash
+SECRET=$(cat /tmp/origin-secret)
+
+# Public hostname over HTTPS — 200 from CloudFront.
+curl -fsSI https://pesquisa.hacknodes.xyz/
+
+# Direct hit to the origin without the secret — 403 from nginx.
+curl -sI http://<ec2-ip>/
+
+# Direct hit with the secret — 200 (CloudFront does the same internally).
+curl -sI -H "X-Origin-Auth: ${SECRET}" http://<ec2-ip>/
+
+# Static asset served from edge cache.
+curl -sI https://pesquisa.hacknodes.xyz/static/<some-asset>  # X-Cache: Hit from cloudfront
+
+# Rate limit on the API path.
+for i in $(seq 1 100); do
+  curl -so /dev/null -w '%{http_code}\n' https://pesquisa.hacknodes.xyz/api/<endpoint>
+done | sort | uniq -c
+```
+
+Once everything verifies, `rm /tmp/origin-secret`.
+
+### Rotating the OriginAuthSecret
+
+1. Generate a new secret locally: `NEW=$(openssl rand -hex 32)`.
+2. Update the CloudFormation stack (CloudFront swaps the header value):
+   ```bash
+   aws cloudformation deploy --region us-east-1 \
+     --stack-name alt-bitnodes-edge \
+     --template-file deploy/cloudformation/edge.yaml \
+     --parameter-overrides OriginAuthSecret=${NEW} \
+     --capabilities CAPABILITY_NAMED_IAM
+   ```
+3. Update the EC2: `echo "ORIGIN_AUTH_SECRET=${NEW}" | sudo tee /etc/alt-bitnodes/origin-auth.env`,
+   then re-run `sudo bash /home/ubuntu/alt-bitnodes/deploy/install.sh` (re-renders
+   the nginx config with the new secret and reloads). Brief 403s are possible
+   while CloudFront propagates the new header.
+
+### Rollback
+
+```bash
+# Public layer
+aws cloudformation delete-stack --region us-east-1 --stack-name alt-bitnodes-edge
+
+# On the EC2
+sudo systemctl disable --now nginx
+sudo apt purge -y nginx
+sudo rm -rf /etc/alt-bitnodes /etc/nginx/sites-enabled/alt-bitnodes \
+            /etc/nginx/sites-available/alt-bitnodes /etc/nginx/conf.d/alt-bitnodes-limits.conf
+```
+
+DNS records can be left in place (pointing at a deleted distribution does no
+harm) or removed from the external provider.
+
 ## Cost notes
 
 - t4g.medium 24/7: ~$24/month.

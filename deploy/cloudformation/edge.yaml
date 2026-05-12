@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  alt-bitnodes public edge: ACM certificate, CloudFront distribution and
+  EC2 security-group ingress restricted to the CloudFront origin-facing
+  prefix list. Deploy in us-east-1 (ACM for CloudFront must live there).
+
+Parameters:
+  DomainName:
+    Type: String
+    Description: Public hostname clients will use (e.g. pesquisa.hacknodes.xyz).
+  OriginHostname:
+    Type: String
+    Description: Hostname CloudFront fetches from; A record points at the EC2.
+  OriginAuthSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: >
+      Shared secret CloudFront injects as X-Origin-Auth. nginx on the origin
+      rejects any request without it. Generate with `openssl rand -hex 32`.
+  OriginEc2SecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group attached to the EC2 instance hosting nginx.
+
+Mappings:
+  # Managed prefix list IDs are region-specific. This template targets us-east-1
+  # only (CloudFront ACM constraint). Keep the map for clarity / future-proofing.
+  CloudFrontPrefixList:
+    us-east-1:
+      OriginFacing: pl-3b927c52
+
+Resources:
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref AWS::NoValue
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'alt-bitnodes public edge for ${DomainName}'
+        Aliases:
+          - !Ref DomainName
+        HttpVersion: http2
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          AcmCertificateArn: !Ref Certificate
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        Origins:
+          - Id: ec2-origin
+            DomainName: !Ref OriginHostname
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+              HTTPPort: 80
+              OriginReadTimeout: 30
+              OriginKeepaliveTimeout: 5
+            OriginCustomHeaders:
+              - HeaderName: X-Origin-Auth
+                HeaderValue: !Ref OriginAuthSecret
+        DefaultCacheBehavior:
+          TargetOriginId: ec2-origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # Managed: CachingDisabled
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          # Managed: AllViewerExceptHostHeader
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+        CacheBehaviors:
+          - PathPattern: /static/*
+            TargetOriginId: ec2-origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD, OPTIONS]
+            CachedMethods: [GET, HEAD]
+            Compress: true
+            # Managed: CachingOptimized
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+            # Managed: AllViewerExceptHostHeader
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+
+  OriginIngressFromCloudFront:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref OriginEc2SecurityGroupId
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      SourcePrefixListId: !FindInMap [CloudFrontPrefixList, !Ref AWS::Region, OriginFacing]
+      Description: 'alt-bitnodes: CloudFront edge ingress (80)'
+
+Outputs:
+  AcmCertificateArn:
+    Value: !Ref Certificate
+    Description: ACM certificate ARN.
+  AcmValidationNote:
+    Value: >
+      Stack stays in CREATE_IN_PROGRESS until DNS validation CNAMEs are created.
+      Inspect the certificate in ACM console -> Domains -> "Create records in
+      Route 53" (or copy the Name/Value CNAME pairs into your external DNS).
+  CloudFrontDomain:
+    Value: !GetAtt Distribution.DomainName
+    Description: >
+      Point your public CNAME (DomainName parameter) at this hostname.
+  CloudFrontDistributionId:
+    Value: !Ref Distribution
+  OriginSecurityGroupId:
+    Value: !Ref OriginEc2SecurityGroupId

@@ -34,7 +34,7 @@ install_apt_packages() {
     build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
     libsqlite3-dev libncursesw5-dev xz-utils tk-dev libxml2-dev \
     libxmlsec1-dev libffi-dev liblzma-dev curl wget git ca-certificates \
-    redis-server tcpdump sqlite3 tor
+    redis-server tcpdump sqlite3 tor nginx
   systemctl enable --now redis-server
   systemctl enable --now tor
 }
@@ -177,6 +177,48 @@ install_systemd_units() {
   fi
 }
 
+bootstrap_origin_secret() {
+  # Shared secret CloudFront injects as X-Origin-Auth; nginx rejects requests
+  # without it. Generated once on first install; rotation is a manual op
+  # (delete the file and re-run, then update the CloudFormation parameter).
+  local dir=/etc/alt-bitnodes
+  local file="${dir}/origin-auth.env"
+  install -d -m 0750 -o root -g root "${dir}"
+  if [[ ! -f "${file}" ]]; then
+    log "Generating ${file}"
+    umask 077
+    printf 'ORIGIN_AUTH_SECRET=%s\n' "$(openssl rand -hex 32)" > "${file}"
+    chmod 0600 "${file}"
+    chown root:root "${file}"
+  else
+    log "${file} already present; leaving as-is"
+  fi
+  # shellcheck disable=SC1090
+  source "${file}"
+  export ORIGIN_AUTH_SECRET
+}
+
+configure_nginx() {
+  log "Configuring nginx"
+  install -m 0644 "${DASHBOARD_DIR}/deploy/nginx/alt-bitnodes-limits.conf" \
+    /etc/nginx/conf.d/alt-bitnodes-limits.conf
+
+  local site=/etc/nginx/sites-available/alt-bitnodes
+  # Use a delimiter that won't appear in the secret (hex only) or hostnames.
+  sed \
+    -e "s|__SERVER_NAME__|origin.hacknodes.xyz pesquisa.hacknodes.xyz _|g" \
+    -e "s|__SECRET__|${ORIGIN_AUTH_SECRET}|g" \
+    "${DASHBOARD_DIR}/deploy/nginx/alt-bitnodes.conf.template" > "${site}"
+  chmod 0644 "${site}"
+
+  ln -sf "${site}" /etc/nginx/sites-enabled/alt-bitnodes
+  rm -f /etc/nginx/sites-enabled/default
+
+  nginx -t
+  systemctl enable nginx
+  systemctl reload nginx
+}
+
 install_cloudwatch_agent() {
   log "Installing amazon-cloudwatch-agent"
   local arch deb cfg_target
@@ -203,6 +245,8 @@ main() {
   setup_crawler
   setup_dashboard
   install_systemd_units
+  bootstrap_origin_secret
+  configure_nginx
   install_cloudwatch_agent
 
   log "Done"
