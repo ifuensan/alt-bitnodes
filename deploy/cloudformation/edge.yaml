@@ -35,9 +35,6 @@ Resources:
     Properties:
       DomainName: !Ref DomainName
       ValidationMethod: DNS
-      DomainValidationOptions:
-        - DomainName: !Ref DomainName
-          HostedZoneId: !Ref AWS::NoValue
 
   Distribution:
     Type: AWS::CloudFront::Distribution
