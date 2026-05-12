@@ -165,6 +165,25 @@ install_systemd_units() {
   fi
 }
 
+install_cloudwatch_agent() {
+  log "Installing amazon-cloudwatch-agent"
+  local arch deb cfg_target
+  arch="$(dpkg --print-architecture)"   # arm64 on Graviton, amd64 otherwise
+  deb="/tmp/amazon-cloudwatch-agent.deb"
+  if ! dpkg -s amazon-cloudwatch-agent >/dev/null 2>&1; then
+    curl -fsSL -o "${deb}" \
+      "https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/${arch}/latest/amazon-cloudwatch-agent.deb"
+    dpkg -i "${deb}"
+    rm -f "${deb}"
+  fi
+
+  cfg_target="/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json"
+  install -m 0644 "${DASHBOARD_DIR}/deploy/cloudwatch-agent.json" "${cfg_target}"
+
+  /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+    -a fetch-config -m ec2 -s -c "file:${cfg_target}"
+}
+
 main() {
   require_root
   install_apt_packages
@@ -172,6 +191,7 @@ main() {
   setup_crawler
   setup_dashboard
   install_systemd_units
+  install_cloudwatch_agent
 
   log "Done"
   echo

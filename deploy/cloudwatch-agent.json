@@ -1,0 +1,42 @@
+{
+  "agent": {
+    "metrics_collection_interval": 60,
+    "run_as_user": "cwagent"
+  },
+  "metrics": {
+    "namespace": "AltBitnodes",
+    "append_dimensions": {
+      "InstanceId": "${aws:InstanceId}"
+    },
+    "aggregation_dimensions": [["InstanceId"]],
+    "metrics_collected": {
+      "mem": {
+        "measurement": [
+          {"name": "mem_used_percent", "rename": "MemUsedPercent"},
+          {"name": "mem_available", "rename": "MemAvailableBytes"}
+        ]
+      },
+      "swap": {
+        "measurement": [
+          {"name": "swap_used_percent", "rename": "SwapUsedPercent"}
+        ]
+      },
+      "disk": {
+        "measurement": [
+          {"name": "used_percent", "rename": "DiskUsedPercent"}
+        ],
+        "resources": ["/"],
+        "drop_device": true
+      },
+      "cpu": {
+        "totalcpu": true,
+        "measurement": [
+          {"name": "usage_active", "rename": "CpuUsedPercent"}
+        ]
+      },
+      "processes": {
+        "measurement": ["running", "blocked"]
+      }
+    }
+  }
+}
