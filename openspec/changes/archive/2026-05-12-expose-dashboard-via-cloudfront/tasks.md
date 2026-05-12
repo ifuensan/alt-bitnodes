@@ -19,7 +19,7 @@
 - [x] 3.2 Recurso `AWS::CertificateManager::Certificate` con `ValidationMethod: DNS` para `DomainName`. Output `AcmCertificateArn` y `AcmValidationCnames`.
 - [x] 3.3 Recurso `AWS::CloudFront::Distribution`: origin con `DomainName: !Ref OriginHostname`, `CustomOriginConfig.OriginProtocolPolicy: http-only`, `OriginCustomHeaders: [{ HeaderName: X-Origin-Auth, HeaderValue: !Ref OriginAuthSecret }]`. Aliases: `[!Ref DomainName]`. ViewerCertificate con el ACM cert + `SslSupportMethod: sni-only` + `MinimumProtocolVersion: TLSv1.2_2021`. Default behavior: managed `CachingDisabled`, `AllowedMethods: [GET, HEAD, OPTIONS]`, `ViewerProtocolPolicy: redirect-to-https`. Cache behavior para `/static/*`: managed `CachingOptimized`. Output `CloudFrontDomain`.
 - [x] 3.4 Recurso `AWS::EC2::SecurityGroupIngress` que abre puerto 80 al `OriginEc2SecurityGroupId` desde la managed prefix list `com.amazonaws.global.cloudfront.origin-facing`. Usar `SourcePrefixListId` con `!FindInMap` o `AWS::EC2::PrefixList` lookup.
-- [ ] 3.5 Validar el template: `aws cloudformation validate-template --template-body file://deploy/cloudformation/edge.yaml` (la sesión AWS local expiró; YAML estructural ya validado con PyYAML; pendiente correr el comando real antes del deploy).
+- [x] 3.5 Validar el template: validado de facto por el `aws cloudformation deploy` exitoso (CREATE_COMPLETE). Tras el primer intento se eliminó un `DomainValidationOptions` vacío que ACM rechazaba.
 
 ## 4. Documentación
 
@@ -31,19 +31,19 @@
 
 ## 5. Despliegue y validación
 
-- [ ] 5.1 Operador genera el secret local: `openssl rand -hex 32 > /tmp/origin-secret`.
-- [ ] 5.2 Operador despliega la stack: `aws cloudformation deploy --template-file deploy/cloudformation/edge.yaml --stack-name alt-bitnodes-edge --parameter-overrides DomainName=pesquisa.hacknodes.xyz OriginHostname=origin.hacknodes.xyz OriginAuthSecret=$(cat /tmp/origin-secret) OriginEc2SecurityGroupId=<sg-id> --region us-east-1 --capabilities CAPABILITY_NAMED_IAM`.
-- [ ] 5.3 Operador consulta outputs y crea los CNAMEs de validación ACM en el proveedor DNS.
-- [ ] 5.4 Tras `CREATE_COMPLETE`, operador crea record A `origin.hacknodes.xyz → 100.50.100.201` y CNAME `pesquisa.hacknodes.xyz → <CloudFrontDomain>`.
-- [ ] 5.5 Operador escribe el secret en el EC2 vía SSH: `echo "ORIGIN_AUTH_SECRET=$(cat /tmp/origin-secret)" | ssh ... "sudo tee /etc/alt-bitnodes/origin-auth.env" && ssh ... "sudo chmod 600 /etc/alt-bitnodes/origin-auth.env"`.
-- [ ] 5.6 Merge a `main` → workflow `Deploy to EC2` corre install.sh → nginx instalado y configurado.
-- [ ] 5.7 Ejecutar smoke tests: `curl -fsSI https://pesquisa.hacknodes.xyz/` (200), `curl -sI http://100.50.100.201/` (403), `curl -sI -H "X-Origin-Auth: $(cat /tmp/origin-secret)" http://100.50.100.201/` (200).
-- [ ] 5.8 Verificar cache: `curl -sI https://pesquisa.hacknodes.xyz/static/<algún-asset>` debe incluir `X-Cache: Miss/Hit from cloudfront` y `Cache-Control` agresivo.
-- [ ] 5.9 Verificar rate limit: ráfaga `for i in {1..100}; do curl -so /dev/null -w "%{http_code}\n" https://pesquisa.hacknodes.xyz/api/<endpoint>; done | sort | uniq -c` — esperar mezcla de 200 y 503.
-- [ ] 5.10 Borrar `/tmp/origin-secret` local tras confirmar todo.
+- [x] 5.1 Operador genera el secret local: `openssl rand -hex 32 > /tmp/origin-secret`. *(En su lugar: install.sh lo generó en el EC2 — leer con `sudo sed -n "s/^ORIGIN_AUTH_SECRET=//p" /etc/alt-bitnodes/origin-auth.env`.)*
+- [x] 5.2 Operador despliega la stack: `aws cloudformation deploy ...` → `CREATE_COMPLETE` tras el fix de `DomainValidationOptions`.
+- [x] 5.3 Operador consulta outputs y crea los CNAMEs de validación ACM en el proveedor DNS.
+- [x] 5.4 Tras `CREATE_COMPLETE`, operador crea record A `origin.hacknodes.xyz → 100.50.100.201` y CNAME `pesquisa.hacknodes.xyz → <CloudFrontDomain>` en Namecheap.
+- [x] 5.5 Secret puesto en EC2 por `install.sh` (no fue necesario inyectarlo vía SSH; CloudFormation recibió el secret leyéndolo del EC2).
+- [x] 5.6 Merge a `main` → workflow `Deploy to EC2` corre `install.sh` → nginx instalado y configurado.
+- [x] 5.7 Smoke tests: `GET https://pesquisa.hacknodes.xyz/` → 200; HTTP directo al EC2 sin header → SG bloquea (mejor que 403); HTTP directo con header desde el propio EC2 → 200.
+- [x] 5.8 Verificar cache: `curl -sI https://pesquisa.hacknodes.xyz/static/app.css` → `x-cache: Hit from cloudfront`, age aumenta entre hits sucesivos.
+- [x] 5.9 Verificar rate limit: 500 reqs con 50 en paralelo → 140×200 + 360×503. `limit_req` funcionando correctamente.
+- [x] 5.10 No aplica: el secret nunca estuvo en `/tmp` local (se generó directamente en el EC2).
 
 ## 6. Cierre
 
-- [ ] 6.1 Configurar billing alarm de CloudWatch en 5 USD/mes para detectar consumos anómalos de CloudFront.
-- [ ] 6.2 Confirmar que el dashboard responde por dominio público y que nada quedó accesible directo por IP sin secret.
-- [ ] 6.3 Archivar el change con `/opsx:archive` una vez validado en producción.
+- [x] 6.1 Configurar billing alarm de CloudWatch en 5 USD/mes para detectar consumos anómalos de CloudFront. *(SNS topic `billing-alerts` → `support@hacknodes.com`, alarma `billing-over-5usd` creada; INSUFFICIENT_DATA hasta que llegue el primer datapoint de billing en ~6-12h)*.
+- [x] 6.2 Confirmar que el dashboard responde por dominio público y que nada quedó accesible directo por IP sin secret. *(GET https://pesquisa.hacknodes.xyz/ → 200; conexión TCP directa al EC2:80 bloqueada por SG)*.
+- [x] 6.3 Archivar el change con `/opsx:archive` una vez validado en producción.
