@@ -14,12 +14,12 @@ mkdir -p log data
 NICE="nice -n 19"
 
 $NICE python -u crawl.py   conf/crawl.f9beb4d9.conf   master >> log/crawl.f9beb4d9.master.out 2>&1 &
-for i in 1 2 3 4; do
+for i in 1 2; do
   $NICE python -u crawl.py conf/crawl.f9beb4d9.conf   slave  >> "log/crawl.f9beb4d9.slave.${i}.out" 2>&1 &
 done
 
 $NICE python -u ping.py    conf/ping.f9beb4d9.conf    master >> log/ping.f9beb4d9.master.out 2>&1 &
-for i in $(seq 1 15); do
+for i in $(seq 1 6); do
   $NICE python -u ping.py  conf/ping.f9beb4d9.conf    slave  >> "log/ping.f9beb4d9.slave.${i}.out" 2>&1 &
 done
 
