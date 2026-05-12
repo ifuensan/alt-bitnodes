@@ -111,10 +111,11 @@ setup_crawler() {
   # t4g.medium has 2 vCPU + single-threaded Tor. Upstream defaults
   # (crawl workers=700, ping workers=2000, sampling=100%) saturate Tor
   # to the point of dropping ~1M circuit requests per 10min.
-  # snapshot_delay raised to 900s so a full crawl sweep (~63k known nodes
-  # at 300 workers) fits within the export window.
+  # snapshot_delay raised to 900s so a full crawl sweep fits within the
+  # export window. 500 workers ≈ 2000-2500 concurrent open sockets, which
+  # is what ends up in each snapshot.
   sudo -u "${INSTALL_USER}" sed -i \
-    -e "s|^workers = .*|workers = 300|" \
+    -e "s|^workers = .*|workers = 500|" \
     -e "s|^onion_peers_sampling_rate = .*|onion_peers_sampling_rate = 25|" \
     -e "s|^snapshot_delay = .*|snapshot_delay = 900|" \
     "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf"
