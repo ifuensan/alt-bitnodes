@@ -105,7 +105,19 @@ setup_crawler() {
   for cfg in "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf"; do
     sudo -u "${INSTALL_USER}" sed -i "s|^user_agent = .*|user_agent = ${USER_AGENT}|" "${cfg}"
     sudo -u "${INSTALL_USER}" sed -i "s|^tor_proxies =.*|tor_proxies = 127.0.0.1:9050|" "${cfg}"
+    sudo -u "${INSTALL_USER}" sed -i "s|^socket_timeout = .*|socket_timeout = 30|" "${cfg}"
   done
+
+  # t4g.medium has 2 vCPU + single-threaded Tor. Upstream defaults
+  # (crawl workers=700, ping workers=2000, sampling=100%) saturate Tor
+  # to the point of dropping ~1M circuit requests per 10min.
+  sudo -u "${INSTALL_USER}" sed -i \
+    -e "s|^workers = .*|workers = 200|" \
+    -e "s|^onion_peers_sampling_rate = .*|onion_peers_sampling_rate = 25|" \
+    "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf"
+  sudo -u "${INSTALL_USER}" sed -i \
+    -e "s|^workers = .*|workers = 200|" \
+    "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf"
 
   sudo -u "${INSTALL_USER}" mkdir -p "${CRAWLER_DIR}/log" "${CRAWLER_DIR}/data"
 }
