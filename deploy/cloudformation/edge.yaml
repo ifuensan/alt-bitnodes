@@ -38,6 +38,12 @@ Resources:
 
   Distribution:
     Type: AWS::CloudFront::Distribution
+    # NOTE: `Logging` is intentionally omitted. nginx access.log on the
+    # origin already records every request; CloudWatch agent covers
+    # infra metrics. CDN-side logs would add S3 storage + delivery cost
+    # without forensic value at current traffic. Revisit if needed.
+    # See docs/postmortems/2026-05-12-tor-saturation-and-public-edge.md
+    # (Sonar hotspot: cloudformation:S6258 — marked Safe).
     Properties:
       DistributionConfig:
         Enabled: true
