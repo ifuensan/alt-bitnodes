@@ -129,6 +129,16 @@ The timer runs every Wednesday at 06:00 with up to 30 min jitter. `Persistent=tr
 
 ## RTT history & latency endpoints
 
+> ⚠️ **Disabled by default since May 2026.** `tcpdump-pcap.service`
+> caused snapshot oscillation (50–4000 nodes randomly) due to its I/O
+> and softirq load competing with the crawler. `install.sh` therefore
+> calls `systemctl disable --now tcpdump-pcap.service pcap-cleanup.timer`.
+> Snapshots are now flat at ~4000 reachable, but `latency_ms` /
+> leaderboard / `/api/v1/nodes/.../rtt/` return null until the
+> follow-up to **replace the pcap pipeline with active pings** is
+> implemented — see `docs/follow-ups.md` and
+> `docs/postmortems/2026-05-13-resize-and-i2p-research.md`.
+
 The dashboard process maintains a SQLite file populated by an in-process ingest task that copies fresh `rtt:<addr>-<port>` entries out of Redis on a fixed cadence. RTT samples are produced upstream by `bitnodes/cache_inv.py`, which consumes rotating pcap files written by `tcpdump-pcap.service`.
 
 The systemd graph is:

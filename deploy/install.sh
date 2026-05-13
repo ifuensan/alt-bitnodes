@@ -158,11 +158,16 @@ install_systemd_units() {
     "${CRAWLER_DIR}/run-tcpdump.sh"
 
   systemctl daemon-reload
-  systemctl enable bitnodes.service tcpdump-pcap.service alt-bitnodes.service
-  systemctl enable --now pcap-cleanup.timer
+  systemctl enable bitnodes.service alt-bitnodes.service
+  # tcpdump-pcap is intentionally disabled. The sniffer's I/O + softirq
+  # load made snapshot counts oscillate 50–4000. With it off, snapshots
+  # stay flat at ~4000. Re-enable only once cache_inv has been ported to
+  # active pings — see docs/follow-ups.md.
+  systemctl disable --now tcpdump-pcap.service 2>/dev/null || true
+  systemctl disable --now pcap-cleanup.timer   2>/dev/null || true
   # Restart so re-runs pick up unit-file changes (enable --now is a no-op on
   # already-running services; we explicitly want them to reload config).
-  systemctl restart bitnodes.service tcpdump-pcap.service alt-bitnodes.service
+  systemctl restart bitnodes.service alt-bitnodes.service
 
   # GeoIP timer only when license key is present. Idempotent: re-running
   # install.sh after the operator drops the key picks it up.

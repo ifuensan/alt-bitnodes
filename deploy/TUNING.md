@@ -158,20 +158,47 @@ In order of bluntness:
 Symptoms: consecutive snapshot files alternate between e.g. 60 and 1400
 nodes, with no clear pattern.
 
-Cause: `snapshot_delay` is too low relative to the sweep time. The
-crawler is taking a snapshot mid-sweep, capturing only what was already
-in `open:*`. The fix is `snapshot_delay` ≥ 900s and `crawl.workers` high
-enough that one sweep completes within a single interval.
+Two causes have been observed and validated in production:
 
-Diagnose with:
+### Cause 1 — `snapshot_delay` shorter than the sweep
+
+The crawler takes a snapshot mid-sweep, capturing only what was already
+in `open:*`. The fix is `snapshot_delay` ≥ 900s and `crawl.workers`
+high enough that one sweep completes within a single interval.
+
+### Cause 2 — `tcpdump-pcap.service` interfering with the crawler
+
+**This was the primary cause of the oscillation we chased for two days
+in May 2026.** The sniffer uses `-s 0` (snaplen unlimited) and writes
+every Bitcoin TCP packet to disk through `cache_inv`. With thousands of
+concurrent handshakes the resulting kernel softirq spikes and EBS I/O
+contention occasionally cut handshakes mid-flight, draining the
+`open:*` set right when the snapshot was taken.
+
+Confirmed empirically: with tcpdump running, snapshots oscillated
+50–4000 randomly. Stopping `tcpdump-pcap.service` and observing five
+consecutive snapshots produced **3724 → 3932 → 4022 → 4073 → 4108
+nodes, monotonically rising and flat**.
+
+`install.sh` therefore **disables `tcpdump-pcap.service` and
+`pcap-cleanup.timer` by default**. The trade-off is that RTT samples
+(consumed by `cache_inv` from the pcaps) stop flowing, so
+`/api/v1/nodes/.../rtt/` and the leaderboard's `latency_ms` go null.
+
+Re-enable only after the follow-up to **replace pcap-based RTT
+with active pings from `cache_inv`** is implemented — see
+`docs/follow-ups.md`.
+
+### Diagnose
 
 ```bash
 ssh ... 'ls -t ~/bitnodes/data/export/f9beb4d9/*.json | head -6 \
   | while read f; do echo "$(basename $f): $(jq length $f) nodes"; done'
 ```
 
-Stable snapshots vary by single-digit percent. Anything else means the
-sweep isn't completing.
+Stable snapshots vary by single-digit percent. Anything else means
+either the sweep isn't completing (cause 1), or tcpdump is back on
+(cause 2).
 
 ## Diagnostic snippets
 

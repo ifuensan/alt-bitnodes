@@ -133,6 +133,40 @@ research-project budget.
    invalidation fees within the free tier; do it whenever HTML/CSS
    ships.
 
+## Addendum (later in the day): tcpdump was the snapshot-oscillation culprit
+
+After the resize, snapshots still oscillated occasionally between
+~600 and ~4000 nodes. We'd attributed this to `snapshot_delay` vs
+sweep time but the pattern looked too random for a pure timing issue.
+
+Hypothesis: the `tcpdump-pcap.service` running on the same host with
+`-s 0` (full-packet capture) and producing ~100–200 MB/min of pcaps
+was creating I/O and kernel softirq pressure that intermittently cut
+handshakes mid-flight, draining `open:*` right when the master pegged
+a snapshot.
+
+Experimental A/B (some pushes contaminated the test, but the trend
+was unambiguous):
+
+| Phase | Snapshot counts (chronological) |
+|---|---|
+| tcpdump ON | 4168, 4165, 558, 688, 3846, 824 — oscillating |
+| `systemctl stop tcpdump-pcap` at 09:28 | (post-restart ramp) |
+| 22 min post-restart, tcpdump OFF | 3724, 3932, 4022, 4073, 4108 — **monotonic, no oscillation** |
+
+`open:*` peaked at 4115. Load fell to ~1.4. Confirmed `tcpdump` was
+the dominant cause of the oscillation, not `snapshot_delay`.
+
+Operational decision: **`install.sh` now disables
+`tcpdump-pcap.service` and `pcap-cleanup.timer` by default**. The cost
+is that `cache_inv` has no pcaps to read, so RTT samples stop flowing
+and the dashboard's `latency_ms` / leaderboard go null. Accepted as a
+trade for snapshot stability.
+
+Follow-up tracked in `docs/follow-ups.md`: replace the passive pcap
+pipeline with active pings from `ping.py` / `cache_inv.py` so RTT
+returns without bringing the sniffer back.
+
 ## Follow-ups
 
 - Implement the I2P SAM client per the research file. Branch
