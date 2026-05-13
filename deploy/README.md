@@ -5,31 +5,41 @@ alt-bitnodes dashboard on the same Ubuntu 24.04 LTS (ARM64) instance.
 
 ## 1. Create the EC2 instance
 
-Recommended sizing: **t4g.medium** (4 GB RAM, 2 vCPU burst, ARM Graviton).
-Pricing in eu-west-3 ≈ $24/month on-demand.
+Recommended sizing: **c7g.2xlarge** (16 GB RAM, 8 vCPU, ARM Graviton3).
+Pricing in us-east-1 ≈ $196/month on-demand.
+
+For a smaller experiment or single-developer sandbox, **t4g.medium**
+(4 GB / 2 vCPU burst, ~$24/month) works, but the crawler caps out
+around ~1400 reachable nodes per snapshot on it due to handshake
+CPU. See `deploy/TUNING.md` for the ceiling rationale.
 
 ### Via AWS Console
 
 1. **AMI**: Ubuntu Server 24.04 LTS, **64-bit (Arm)**.
-2. **Instance type**: `t4g.medium`.
+2. **Instance type**: `c7g.2xlarge` (or `t4g.medium` for the smaller
+   profile).
 3. **Key pair**: pick or create one. Save the `.pem` locally.
 4. **Network settings → Security group**: create new with one rule:
    - SSH (port 22), source: **My IP**.
-   - No other inbound rules. The dashboard is only reached via SSH tunnel.
+   - No other inbound rules. Public traffic enters via CloudFront —
+     port 80 is opened separately by the edge CloudFormation stack
+     and restricted to the CloudFront prefix list.
 5. **Storage**: 1× EBS gp3, **16 GiB** (root). Default IOPS/throughput are fine.
 6. **Advanced → User data**: leave empty (we run the installer manually).
-7. Launch.
+7. Launch and associate an Elastic IP so the public DNS records can
+   point at a stable address (the CloudFormation edge stack expects
+   `origin.<your-domain>` to A-record to it).
 
 ### Via AWS CLI (alternative)
 
 ```bash
 aws ec2 run-instances \
-  --region eu-west-3 \
-  --image-id $(aws ec2 describe-images --region eu-west-3 \
+  --region us-east-1 \
+  --image-id $(aws ec2 describe-images --region us-east-1 \
     --owners 099720109477 \
     --filters "Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*" \
     --query 'sort_by(Images, &CreationDate)[-1].ImageId' --output text) \
-  --instance-type t4g.medium \
+  --instance-type c7g.2xlarge \
   --key-name YOUR_KEY \
   --security-group-ids sg-XXXXXXXX \
   --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=16,VolumeType=gp3}' \
@@ -316,11 +326,21 @@ harm) or removed from the external provider.
 
 ## Cost notes
 
-- t4g.medium 24/7: ~$24/month.
+Current production sizing (c7g.2xlarge in us-east-1):
+
+- c7g.2xlarge 24/7: ~$196/month.
 - EBS gp3 16 GiB: ~$1.30/month.
-- Egress: ~1 GB/month (well under free tier 100 GB).
-- Total: **~$25/month**.
+- Elastic IP (associated): free.
+- CloudFront + ACM: free tier (1 TB egress + 10M requests/mo) covers
+  current traffic; ACM certificate is free.
+- Egress from EC2 to CloudFront: covered under "to CloudFront" free
+  tier; user-facing egress is metered on CloudFront's side.
+- **Total: ~$197–200/month** at current traffic.
+
+Smaller alternative (t4g.medium) costs ~$24/month for the instance —
+viable if you accept a snapshot ceiling around 1400 reachable nodes
+(see `deploy/TUNING.md`).
 
 Stop the instance when not needed (`aws ec2 stop-instances`) — you only
-pay EBS while stopped (~$1.30/month). Public IP changes on stop unless
-you allocate an Elastic IP.
+pay EBS while stopped (~$1.30/month). With an Elastic IP associated,
+the public IP persists across stops.

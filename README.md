@@ -30,8 +30,10 @@ Este proyecto es un sucesor:
 - Añade una capa propia (`alt-bitnodes`, este repositorio) con FastAPI + SQLite
   que persiste el RTT por nodo y expone una API v1 estable, además de un
   dashboard HTML mínimo.
-- Convive en una sola instancia (Ubuntu 24.04 ARM, t4g.medium en AWS):
-  consulta Redis para el estado vivo y SQLite para histórico.
+- Convive en una sola instancia (Ubuntu 24.04 ARM, **c7g.2xlarge** en
+  AWS): consulta Redis para el estado vivo y SQLite para histórico.
+  Sirve público en `https://pesquisa.hacknodes.xyz` detrás de CloudFront
+  (TLS + cache de estáticos) con nginx como reverse proxy en el origen.
 
 El alcance es deliberadamente acotado: no se intenta reproducir todas las
 secciones de bitnodes.io, solo las que tienen valor analítico (snapshots,
@@ -236,8 +238,10 @@ This project is a successor:
 - Adds a separate layer (`alt-bitnodes`, this repository) with FastAPI +
   SQLite that persists per-node RTT and exposes a stable v1 API, plus a
   minimal HTML dashboard.
-- Runs alongside the crawler on a single host (Ubuntu 24.04 ARM, t4g.medium
-  on AWS): reads Redis for live state and SQLite for history.
+- Runs alongside the crawler on a single host (Ubuntu 24.04 ARM,
+  **c7g.2xlarge** on AWS): reads Redis for live state and SQLite for
+  history. Public at `https://pesquisa.hacknodes.xyz` behind CloudFront
+  (TLS + static cache) with nginx as the origin reverse proxy.
 
 Scope is deliberately narrow: no attempt to reproduce every section of
 bitnodes.io, only those with analytical value (snapshots, fastest nodes,

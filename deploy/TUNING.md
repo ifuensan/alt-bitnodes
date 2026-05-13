@@ -2,13 +2,15 @@
 
 How to size the upstream `bitnodes` crawler for a given host without
 saturating Tor or under-filling the snapshot. Numbers below are calibrated
-for the production EC2 (t4g.medium, 2 vCPU, 4 GB RAM) running
-`crawl + ping + resolve + export + seeder + cache_inv` plus Redis, Tor
-and nginx on the same box.
+for the current production EC2 (**c7g.2xlarge, 8 vCPU, 16 GB RAM**)
+running `crawl + ping + resolve + export + seeder + cache_inv` plus
+Redis, Tor and nginx on the same box. Earlier calibration data from
+the previous t4g.medium (2 vCPU, 4 GB) is preserved in the tables
+below for reference.
 
 If you move to a larger or smaller instance, rescale **`workers`**
-proportionally to vCPU count and verify with the diagnostic commands at
-the bottom.
+proportionally to vCPU count (≈150 crawl workers per vCPU) and verify
+with the diagnostic commands at the bottom.
 
 ## Knobs
 
@@ -23,15 +25,28 @@ sockets in flight (connecting, handshaking, established). At steady state
 `open:*` keys in Redis ≈ `crawl.workers × ~3` until handshake-completion
 becomes the bottleneck (see _Ceiling_ below).
 
+On a **c7g.2xlarge (8 vCPU)** — current production:
+
+| Crawl workers | Approx. open sockets | Comments |
+|---|---|---|
+| 500 | ~1700 | Linear scaling phase. |
+| 1000 | ~3200 | Tor still healthy, plenty of CPU left. |
+| **1200** | **~3700–4000** | **Sweet spot in production today.** |
+| 1500+ | not yet measured | Probably gains more before Tor saturates. |
+
+On a **t4g.medium (2 vCPU)** — earlier calibration, kept for reference:
+
 | Crawl workers | Approx. open sockets | Comments |
 |---|---|---|
 | 200 | ~900 | Low, fine if you only care about ping coverage. |
-| 300 | ~1380 | Sweet spot for snapshot count vs. load on a 2-vCPU box. |
-| 500 | ~1390 | Marginal gain; handshake ceiling kicks in. |
+| 300 | ~1380 | Sweet spot for snapshot count vs. load on 2 vCPU. |
+| 500 | ~1390 | Marginal gain; handshake CPU ceiling kicks in. |
 | 700 (upstream default) | unstable | Saturates Tor; oscillates wildly. |
 
-**Rule of thumb**: ~150 crawl workers per vCPU. Above that, returns
-diminish because each handshake is CPU-bound (crypto + message parse).
+**Rule of thumb**: ~150 crawl workers per vCPU. The 2-vCPU host
+plateaued at ~1390 simultaneous sockets because every handshake
+costs CPU (Bitcoin `version` decode + crypto); on 8 vCPU the same
+ceiling moves up roughly proportionally.
 
 ### `ping.workers`
 
@@ -91,29 +106,35 @@ parallel. Slaves share work with the master via Redis.
 
 Don't go below 1 of each — the master needs help.
 
-## Ceiling: why scaling `workers` past ~300 doesn't help
+## Ceiling: the CPU wall and how the resize moved it
 
-On a t4g.medium (2 vCPU) the snapshot count plateaus at ~1390 even with
-`workers=500`. Forensic check:
+On the earlier **t4g.medium (2 vCPU)** the snapshot count plateaued
+at ~1390 even with `workers=500`. Forensic check at the time:
 
 - `redis-cli --scan --pattern 'open:*' | wc -l` ≈ 1390
 - `ss -s | grep estab` ≈ 5400
 
-So the kernel has ~5400 TCP connections established, but only ~1390 of
-them ever complete the Bitcoin `version`/`verack` handshake and get
-marked as `open` by the crawler. The other ~4000 are stuck in handshake
-because the CPU is the bottleneck (decode `version` message → reply →
-parse `verack`).
+So the kernel had ~5400 TCP connections established, but only ~1390
+ever completed the Bitcoin `version`/`verack` handshake and were
+marked as `open` by the crawler. The other ~4000 were stuck in
+handshake because the CPU was the bottleneck (decode `version` →
+reply → parse `verack`).
 
-To break this ceiling you need either:
+**Resize to c7g.2xlarge (8 vCPU, May 2026) moved the wall up
+~3× as expected**. With `workers=1200` we now see `open:*` ≈ 3700–4000
+consistently, with load ~1.5 and Tor at ~92% (no longer saturating
+the box). The exact new ceiling has not been measured — `workers=1500`
+or higher may yield more before Tor (still single-threaded) becomes
+the next bottleneck.
 
-1. **More vCPUs** (`c6g.2xlarge` ≈ 8 vCPU, ~$96/mo, should hit 5000+
-   `open:*`), or
-2. **Faster network** (closer to your peers, lower RTT, more handshakes
-   per second). AWS region is the main lever.
+To break the c7g.2xlarge ceiling further you would need:
 
-Just adding more `workers` to a 2-vCPU box makes the kernel sweat without
-moving the snapshot.
+1. **A bigger instance** (`c7g.4xlarge` ≈ 16 vCPU, ~$392/mo), or
+2. **Splitting Tor onto its own VM** so it stops competing with the
+   crawler workers on the same box (see
+   `docs/postmortems/2026-05-12-tor-saturation-and-public-edge.md`
+   and the I2P research file in `_bmad-output/` for the architectural
+   plan).
 
 ## When Tor is in trouble
 
