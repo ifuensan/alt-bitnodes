@@ -1,0 +1,27 @@
+[Unit]
+Description=alt-bitnodes MCP server (Streamable HTTP)
+After=network-online.target alt-bitnodes.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+Group=__USER__
+WorkingDirectory=__DASHBOARD_DIR__
+Environment=BITNODES_EXPORT_DIR=__EXPORT_DIR__
+Environment=RTT_DB_PATH=__DASHBOARD_DIR__/data/rtt.sqlite
+Environment=RTT_INGEST_ENABLED=false
+Environment=MCP_TOKEN_PATH=/etc/alt-bitnodes/mcp-token
+Environment=MCP_REQUIRE_AUTH=1
+ExecStart=__DASHBOARD_DIR__/venv/bin/python -m alt_bitnodes_mcp --http --host 127.0.0.1 --port 8001
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=__DASHBOARD_DIR__/data
+
+[Install]
+WantedBy=multi-user.target

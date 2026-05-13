@@ -71,4 +71,26 @@ server {
         proxy_read_timeout 30s;
         proxy_connect_timeout 5s;
     }
+
+    # MCP Streamable HTTP transport. The MCP server (alt-bitnodes-mcp.service)
+    # validates Authorization: Bearer <token> itself; nginx only enforces the
+    # CloudFront origin gate (X-Origin-Auth, set on the server block above)
+    # and rate-limits abusive clients. Buffering is disabled and timeouts
+    # raised because MCP responses stream Server-Sent Events that can stay
+    # open for tens of minutes.
+    location /mcp/ {
+        limit_req zone=api burst=20 nodelay;
+        proxy_pass http://127.0.0.1:8001/mcp/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+        proxy_connect_timeout 5s;
+    }
 }

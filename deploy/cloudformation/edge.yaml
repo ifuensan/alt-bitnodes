@@ -89,6 +89,22 @@ Resources:
             CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
             # Managed: AllViewerExceptHostHeader
             OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+          # MCP Streamable HTTP — POSTs JSON-RPC, opens SSE streams, sometimes
+          # DELETEs a session. Cache MUST be off; methods need the full set
+          # since CloudFront forces [GET,HEAD,OPTIONS,PUT,POST,PATCH,DELETE]
+          # whenever any non-idempotent verb is allowed. AllViewer forwards
+          # Authorization through to the origin (the bearer header lives at
+          # the application layer, not CloudFront's).
+          - PathPattern: /mcp/*
+            TargetOriginId: ec2-origin
+            ViewerProtocolPolicy: redirect-to-https
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            CachedMethods: [GET, HEAD]
+            Compress: false
+            # Managed: CachingDisabled
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            # Managed: AllViewerExceptHostHeader
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
 
   OriginIngressFromCloudFront:
     Type: AWS::EC2::SecurityGroupIngress

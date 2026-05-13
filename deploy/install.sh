@@ -141,6 +141,7 @@ install_systemd_units() {
   log "Installing systemd units"
   install -m 0644 "${DASHBOARD_DIR}/deploy/bitnodes.service" /etc/systemd/system/bitnodes.service
   install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes.service" /etc/systemd/system/alt-bitnodes.service
+  install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes-mcp.service" /etc/systemd/system/alt-bitnodes-mcp.service
   install -m 0644 "${DASHBOARD_DIR}/deploy/tcpdump-pcap.service" /etc/systemd/system/tcpdump-pcap.service
   install -m 0644 "${DASHBOARD_DIR}/deploy/geoip-update.service" /etc/systemd/system/geoip-update.service
   install -m 0644 "${DASHBOARD_DIR}/deploy/geoip-update.timer" /etc/systemd/system/geoip-update.timer
@@ -153,12 +154,13 @@ install_systemd_units() {
   sudo -u "${INSTALL_USER}" mkdir -p "${CRAWLER_DIR}/data/pcap/f9beb4d9"
 
   sed -i "s|__USER__|${INSTALL_USER}|g; s|__CRAWLER_DIR__|${CRAWLER_DIR}|g; s|__DASHBOARD_DIR__|${DASHBOARD_DIR}|g; s|__EXPORT_DIR__|${CRAWLER_DIR}/data/export/f9beb4d9|g" \
-    /etc/systemd/system/bitnodes.service /etc/systemd/system/alt-bitnodes.service /etc/systemd/system/tcpdump-pcap.service \
+    /etc/systemd/system/bitnodes.service /etc/systemd/system/alt-bitnodes.service \
+    /etc/systemd/system/alt-bitnodes-mcp.service /etc/systemd/system/tcpdump-pcap.service \
     /etc/systemd/system/geoip-update.service /etc/systemd/system/pcap-cleanup.service \
     "${CRAWLER_DIR}/run-tcpdump.sh"
 
   systemctl daemon-reload
-  systemctl enable bitnodes.service alt-bitnodes.service
+  systemctl enable bitnodes.service alt-bitnodes.service alt-bitnodes-mcp.service
   # tcpdump-pcap is intentionally disabled. The sniffer's I/O + softirq
   # load made snapshot counts oscillate 50–4000. With it off, snapshots
   # stay flat at ~4000. Re-enable only once cache_inv has been ported to
@@ -167,7 +169,7 @@ install_systemd_units() {
   systemctl disable --now pcap-cleanup.timer   2>/dev/null || true
   # Restart so re-runs pick up unit-file changes (enable --now is a no-op on
   # already-running services; we explicitly want them to reload config).
-  systemctl restart bitnodes.service alt-bitnodes.service
+  systemctl restart bitnodes.service alt-bitnodes.service alt-bitnodes-mcp.service
 
   # GeoIP timer only when license key is present. Idempotent: re-running
   # install.sh after the operator drops the key picks it up.
@@ -204,6 +206,28 @@ bootstrap_origin_secret() {
   # shellcheck disable=SC1090
   source "${file}"
   export ORIGIN_AUTH_SECRET
+}
+
+bootstrap_mcp_token() {
+  # Bearer token required by the MCP HTTP transport (alt-bitnodes-mcp.service
+  # validates Authorization: Bearer <this>). Owned by the service user so
+  # systemd can read it without giving the file world access. Rotation:
+  # delete the file and re-run install.sh; the service will pick up the new
+  # token on its next restart.
+  local dir=/etc/alt-bitnodes
+  local file="${dir}/mcp-token"
+  install -d -m 0750 -o root -g "${INSTALL_USER}" "${dir}"
+  if [[ ! -f "${file}" ]]; then
+    log "Generating ${file}"
+    umask 077
+    # 32 random bytes, base64url-encoded, no newline.
+    openssl rand -base64 32 | tr -d '\n=' | tr '/+' '_-' > "${file}"
+    chmod 0640 "${file}"
+    chown root:"${INSTALL_USER}" "${file}"
+    echo "    MCP bearer token written (chmod 0640 root:${INSTALL_USER})"
+  else
+    log "${file} already present; leaving as-is"
+  fi
 }
 
 configure_nginx() {
@@ -252,17 +276,19 @@ main() {
   install_pyenv
   setup_crawler
   setup_dashboard
-  install_systemd_units
   bootstrap_origin_secret
+  bootstrap_mcp_token
+  install_systemd_units
   configure_nginx
   install_cloudwatch_agent
 
   log "Done"
   echo
   echo "Verify:"
-  echo "  systemctl status bitnodes alt-bitnodes"
-  echo "  ssh tunnel: ssh -L 8000:127.0.0.1:8000 <this-host>"
-  echo "  open http://localhost:8000"
+  echo "  systemctl status bitnodes alt-bitnodes alt-bitnodes-mcp"
+  echo "  ssh tunnel: ssh -L 8000:127.0.0.1:8000 -L 8001:127.0.0.1:8001 <this-host>"
+  echo "  open http://localhost:8000   # dashboard"
+  echo "  curl -H \"Authorization: Bearer \$(sudo cat /etc/alt-bitnodes/mcp-token)\" http://localhost:8001/mcp/"
 }
 
 main "$@"
