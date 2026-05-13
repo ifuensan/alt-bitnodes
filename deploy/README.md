@@ -370,7 +370,7 @@ ssh -i $PEM_HNL ubuntu@<host> 'sudo cat /etc/alt-bitnodes/mcp-token'
 Register the remote server:
 
 ```bash
-claude mcp add --transport http alt-bitnodes \
+claude mcp add --transport http pesquisa-btc \
   https://pesquisa.hacknodes.xyz/mcp/ \
   --header "Authorization: Bearer <token>"
 ```
@@ -384,7 +384,7 @@ For a local checkout (no auth, runs `python -m alt_bitnodes_mcp --stdio`):
 ```json
 {
   "mcpServers": {
-    "alt-bitnodes": {
+    "pesquisa-btc": {
       "command": "/path/to/alt-bitnodes/venv/bin/python",
       "args": ["-m", "alt_bitnodes_mcp", "--stdio"],
       "cwd": "/path/to/alt-bitnodes",

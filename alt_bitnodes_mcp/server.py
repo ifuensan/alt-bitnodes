@@ -7,7 +7,7 @@ from alt_bitnodes_mcp import prompts, resources, tools
 
 def build_server() -> FastMCP:
     """Construct and return a fully-wired FastMCP server."""
-    mcp = FastMCP("alt-bitnodes")
+    mcp = FastMCP("pesquisa-btc")
     tools.register(mcp)
     resources.register(mcp)
     prompts.register(mcp)
