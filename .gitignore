@@ -5,3 +5,9 @@ __pycache__/
 .idea/
 .vscode/
 data/
+
+# BMAD: per-user install answers, regenerated on each run.
+_bmad/config.user.toml
+
+# Claude Code internal lock for scheduled wakeups.
+.claude/scheduled_tasks.lock
