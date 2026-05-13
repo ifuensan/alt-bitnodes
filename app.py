@@ -226,6 +226,33 @@ def v1_addresses(
     }
 
 
+def _no_snapshots_404():
+    return HTTPException(status_code=404, detail=ERR_NO_SNAPSHOTS)
+
+
+def _missing_snapshot_404():
+    return HTTPException(status_code=404, detail="latest snapshot missing on disk")
+
+
+# /nodes/leaderboard/ MUST be registered before /nodes/{node_id}/ because
+# Starlette matches in registration order and `{node_id}` would otherwise
+# swallow the literal "leaderboard" segment.
+@app.get("/api/v1/nodes/leaderboard/", tags=["v1"], summary="Fastest nodes by median RTT",
+         responses={404: {"description": ERR_NO_SNAPSHOTS}})
+def v1_leaderboard(
+    country: Annotated[str | None, Query(description="ISO-2 country code filter")] = None,
+    asn: Annotated[str | None, Query(description="ASN filter, e.g. 'AS13335'")] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
+) -> dict:
+    try:
+        results = leaderboard(country=country, asn=asn, limit=limit)
+    except NoSnapshotsError:
+        raise _no_snapshots_404()
+    except SnapshotMissingError:
+        raise _missing_snapshot_404()
+    return {"count": len(results), "results": results}
+
+
 @app.get("/api/v1/nodes/{node_id}/", tags=["v1"], summary="Current status of a node",
          responses={400: {"description": "invalid node id"}, 404: {"description": "node not found"}})
 def v1_node(node_id: str) -> dict:
@@ -254,30 +281,6 @@ def v1_node_rtt(
         raise HTTPException(status_code=404, detail="node not found")
 
     return {"address": addr, "port": port, "latency": samples_for(addr, port, hours)}
-
-
-def _no_snapshots_404():
-    return HTTPException(status_code=404, detail=ERR_NO_SNAPSHOTS)
-
-
-def _missing_snapshot_404():
-    return HTTPException(status_code=404, detail="latest snapshot missing on disk")
-
-
-@app.get("/api/v1/nodes/leaderboard/", tags=["v1"], summary="Fastest nodes by median RTT",
-         responses={404: {"description": ERR_NO_SNAPSHOTS}})
-def v1_leaderboard(
-    country: Annotated[str | None, Query(description="ISO-2 country code filter")] = None,
-    asn: Annotated[str | None, Query(description="ASN filter, e.g. 'AS13335'")] = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 50,
-) -> dict:
-    try:
-        results = leaderboard(country=country, asn=asn, limit=limit)
-    except NoSnapshotsError:
-        raise _no_snapshots_404()
-    except SnapshotMissingError:
-        raise _missing_snapshot_404()
-    return {"count": len(results), "results": results}
 
 
 @app.get("/api/v1/rankings/countries/", tags=["v1"], summary="Per-country aggregate",
