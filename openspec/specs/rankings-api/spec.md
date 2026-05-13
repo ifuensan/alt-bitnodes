@@ -7,10 +7,10 @@ Leaderboard and ranking endpoints (fastest nodes, by country, by ASN, by user-ag
 ## Requirements
 
 ### Requirement: Fastest-nodes leaderboard
-The system SHALL expose `GET /api/v1/leaderboard/` returning the top-N nodes by lowest median RTT within the configured latency window, with optional country and ASN filters.
+The system SHALL expose `GET /api/v1/nodes/leaderboard/` returning the top-N nodes by lowest median RTT within the configured latency window, with optional country and ASN filters.
 
 #### Scenario: Default leaderboard
-- **WHEN** a client requests `/api/v1/leaderboard/` with no query parameters
+- **WHEN** a client requests `/api/v1/nodes/leaderboard/` with no query parameters
 - **THEN** the response SHALL be `{"count": N, "results": [{"address", "port", "country", "asn", "asn_name", "user_agent", "latency_ms"}, ...]}` containing up to 50 entries, sorted by `latency_ms` ascending, where every entry has a non-null `latency_ms`.
 
 #### Scenario: Country filter

@@ -159,8 +159,8 @@ LOGS DE TEXTO  (canal aparte, NO son datos del producto — son diagnóstico)
 GET /api/v1/snapshots/                 lista de snapshots disponibles
 GET /api/v1/snapshots/latest/          snapshot más reciente con latency_ms
 GET /api/v1/nodes/{addr}-{port}/       detalle de un nodo
-GET /api/v1/nodes/{addr}-{port}/latency/?hours=N    serie temporal RTT
-GET /api/v1/leaderboard/?limit=N       fastest nodes
+GET /api/v1/nodes/{addr}-{port}/rtt/?hours=N        serie temporal RTT
+GET /api/v1/nodes/leaderboard/?limit=N fastest nodes
 GET /api/v1/rankings/countries/        agregado por país
 GET /api/v1/rankings/asns/             agregado por ASN
 GET /api/v1/rankings/user-agents/      agregado por user-agent
@@ -368,8 +368,8 @@ systemd.
 GET /api/v1/snapshots/                 list available snapshots
 GET /api/v1/snapshots/latest/          most recent snapshot, with latency_ms
 GET /api/v1/nodes/{addr}-{port}/       node detail
-GET /api/v1/nodes/{addr}-{port}/latency/?hours=N    RTT time series
-GET /api/v1/leaderboard/?limit=N       fastest nodes
+GET /api/v1/nodes/{addr}-{port}/rtt/?hours=N        RTT time series
+GET /api/v1/nodes/leaderboard/?limit=N fastest nodes
 GET /api/v1/rankings/countries/        per-country aggregate
 GET /api/v1/rankings/asns/             per-ASN aggregate
 GET /api/v1/rankings/user-agents/      per-user-agent aggregate

@@ -149,7 +149,7 @@ async function loadSnapshot(ts) {
 }
 
 async function loadLeaderboard() {
-  const data = await fetchJSON("/api/v1/leaderboard/?limit=20");
+  const data = await fetchJSON("/api/v1/nodes/leaderboard/?limit=20");
   const tbody = document.querySelector("#leaderboard-table tbody");
   tbody.innerHTML = "";
   if (!data.results.length) {

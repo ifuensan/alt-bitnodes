@@ -584,9 +584,9 @@ def _latest_snapshot_rows() -> list[list]:
         raise HTTPException(status_code=404, detail="latest snapshot missing on disk")
 
 
-@app.get("/api/v1/nodes/{node_id}/latency/", tags=["v1"], summary="RTT time series for a node",
+@app.get("/api/v1/nodes/{node_id}/rtt/", tags=["v1"], summary="RTT time series for a node",
          responses={400: {"description": "invalid node id"}, 404: {"description": "node not found"}})
-def v1_node_latency(
+def v1_node_rtt(
     node_id: str,
     hours: Annotated[int, Query(ge=1, le=168)] = 24,
 ) -> dict:
@@ -607,7 +607,7 @@ def v1_node_latency(
     return {"address": addr, "port": port, "latency": samples_for(addr, port, hours)}
 
 
-@app.get("/api/v1/leaderboard/", tags=["v1"], summary="Fastest nodes by median RTT",
+@app.get("/api/v1/nodes/leaderboard/", tags=["v1"], summary="Fastest nodes by median RTT",
          responses={404: {"description": ERR_NO_SNAPSHOTS}})
 def v1_leaderboard(
     country: Annotated[str | None, Query(description="ISO-2 country code filter")] = None,

@@ -154,13 +154,13 @@ Env vars on the dashboard service (all optional):
 After deploy, wait one ingest interval (≥30s) and run:
 
 ```bash
-curl -s http://localhost:8000/api/v1/leaderboard/?limit=5 | jq
+curl -s http://localhost:8000/api/v1/nodes/leaderboard/?limit=5 | jq
 curl -s http://localhost:8000/api/v1/rankings/countries/ | jq '.results[:5]'
 curl -s http://localhost:8000/api/v1/rankings/asns/      | jq '.results[:5]'
 curl -s http://localhost:8000/api/v1/rankings/user-agents/ | jq '.results[:5]'
 curl -s http://localhost:8000/api/v1/groups/by-ip/        | jq '.results[:5]'
 NODE=$(curl -s http://localhost:8000/api/v1/snapshots/latest/ | jq -r '.nodes | keys[0]' | sed 's/:/-/')
-curl -s "http://localhost:8000/api/v1/nodes/$NODE/latency/?hours=24" | jq
+curl -s "http://localhost:8000/api/v1/nodes/$NODE/rtt/?hours=24" | jq
 sqlite3 "${RTT_DB_PATH:-$HOME/alt-bitnodes/data/rtt.sqlite}" \
   'SELECT count(*), datetime(min(ts),"unixepoch"), datetime(max(ts),"unixepoch") FROM rtt_samples'
 ```

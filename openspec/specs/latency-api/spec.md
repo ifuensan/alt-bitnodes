@@ -22,10 +22,10 @@ The system SHALL populate the `latency_ms` field in `/api/v1/snapshots/{timestam
 - **THEN** every entry in the `nodes` map whose `(address, port)` has samples within the window SHALL have a non-null `latency_ms` (5th array position), and entries without samples SHALL have `null`.
 
 ### Requirement: Per-node latency time series endpoint
-The system SHALL expose `GET /api/v1/nodes/{node_id}/latency/` returning the time series of RTT samples for one node over the requested window.
+The system SHALL expose `GET /api/v1/nodes/{node_id}/rtt/` returning the time series of RTT samples for one node over the requested window.
 
 #### Scenario: Default window
-- **WHEN** a client requests `/api/v1/nodes/{addr}-{port}/latency/` without query parameters
+- **WHEN** a client requests `/api/v1/nodes/{addr}-{port}/rtt/` without query parameters
 - **THEN** the response SHALL be `{"address": "<addr>", "latency": [[ts, rtt_ms], ...]}` covering the last 24 hours, sorted by `ts` ascending.
 
 #### Scenario: Custom window
