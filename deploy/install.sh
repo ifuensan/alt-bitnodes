@@ -108,19 +108,18 @@ setup_crawler() {
     sudo -u "${INSTALL_USER}" sed -i "s|^socket_timeout = .*|socket_timeout = 60|" "${cfg}"
   done
 
-  # t4g.medium has 2 vCPU + single-threaded Tor. Upstream defaults
-  # (crawl workers=700, ping workers=2000, sampling=100%) saturate Tor
-  # to the point of dropping ~1M circuit requests per 10min.
-  # snapshot_delay raised to 900s so a full crawl sweep fits within the
-  # export window. 500 workers ≈ 2000-2500 concurrent open sockets, which
-  # is what ends up in each snapshot.
+  # c7g.2xlarge: 8 vCPU, 16 GB RAM. Crawler is CPU-bound at handshake
+  # parsing, so workers scale ~linearly with vCPU count (rule of thumb:
+  # ~150 crawl workers per vCPU). Upstream defaults (crawl=700,
+  # ping=2000, sampling=100%) still over-subscribe Tor; keep
+  # onion_peers_sampling_rate low and ping.workers modest.
   sudo -u "${INSTALL_USER}" sed -i \
-    -e "s|^workers = .*|workers = 500|" \
+    -e "s|^workers = .*|workers = 1200|" \
     -e "s|^onion_peers_sampling_rate = .*|onion_peers_sampling_rate = 25|" \
     -e "s|^snapshot_delay = .*|snapshot_delay = 900|" \
     "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf"
   sudo -u "${INSTALL_USER}" sed -i \
-    -e "s|^workers = .*|workers = 200|" \
+    -e "s|^workers = .*|workers = 600|" \
     "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf"
 
   sudo -u "${INSTALL_USER}" mkdir -p "${CRAWLER_DIR}/log" "${CRAWLER_DIR}/data"
