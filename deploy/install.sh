@@ -165,8 +165,17 @@ install_systemd_units() {
   # load made snapshot counts oscillate 50–4000. With it off, snapshots
   # stay flat at ~4000. Re-enable only once cache_inv has been ported to
   # active pings — see docs/follow-ups.md.
-  systemctl disable --now tcpdump-pcap.service 2>/dev/null || true
-  systemctl disable --now pcap-cleanup.timer   2>/dev/null || true
+  # `disable --now` does NOT always stop a running unit (observed 2026-05-13
+  # where it stayed active=running after disable). Stop explicitly first,
+  # then disable; only swallow expected "already disabled" errors.
+  systemctl stop    tcpdump-pcap.service || true
+  systemctl stop    pcap-cleanup.timer   || true
+  systemctl disable tcpdump-pcap.service 2>/dev/null || true
+  systemctl disable pcap-cleanup.timer   2>/dev/null || true
+  # Belt and braces: if a tcpdump process is still alive (e.g. started
+  # outside systemd by an earlier run-tcpdump.sh invocation), kill it.
+  pkill -f run-tcpdump.sh 2>/dev/null || true
+  pkill -x tcpdump        2>/dev/null || true
   # Restart so re-runs pick up unit-file changes (enable --now is a no-op on
   # already-running services; we explicitly want them to reload config).
   systemctl restart bitnodes.service alt-bitnodes.service alt-bitnodes-mcp.service
