@@ -1,4 +1,5 @@
-fastapi==0.115.0
+fastapi==0.136.1
 uvicorn[standard]==0.32.0
 redis==5.2.0
 pycountry==24.6.1
+mcp==1.27.1
