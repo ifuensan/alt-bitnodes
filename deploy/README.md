@@ -334,6 +334,101 @@ sudo rm -rf /etc/alt-bitnodes /etc/nginx/sites-enabled/alt-bitnodes \
 DNS records can be left in place (pointing at a deleted distribution does no
 harm) or removed from the external provider.
 
+## MCP service
+
+`alt-bitnodes` also exposes its data through a **Model Context Protocol**
+server so LLM clients (Claude Desktop, Claude Code, etc.) can query the
+network directly. Same Redis/SQLite reads as the REST API — no new data
+store, no writes.
+
+Surface:
+
+- **12 tools** — `get_latest_snapshot`, `list_snapshots`, `get_snapshot_by_timestamp`,
+  `get_leaderboard`, `get_node_rtt`, `get_node_details`, `search_nodes`,
+  `get_chart_data`, `get_ip_groups`, `get_ip_group_detail`, `get_rankings`,
+  `parse_node_id_str`.
+- **4 resources** — `bitcoin://snapshot/latest`, `bitcoin://snapshot/{timestamp}`,
+  `bitcoin://leaderboard/latency`, `bitcoin://leaderboard/uptime`.
+- **4 prompts** — `analyze-network-health`, `compare-snapshots`,
+  `latency-report`, `network-distribution-summary`.
+
+Two transports:
+
+- **stdio** — for local Claude Desktop / local `claude mcp add`. No auth
+  (process-level trust).
+- **Streamable HTTP** — `127.0.0.1:8001` behind nginx + CloudFront at
+  `https://pesquisa.hacknodes.xyz/mcp/`. Bearer-token authenticated.
+
+### Connect from Claude Code (HTTPS, recommended)
+
+Get the token off the EC2 (only root and the service user can read it):
+
+```bash
+ssh -i $PEM_HNL ubuntu@<host> 'sudo cat /etc/alt-bitnodes/mcp-token'
+```
+
+Register the remote server:
+
+```bash
+claude mcp add --transport http alt-bitnodes \
+  https://pesquisa.hacknodes.xyz/mcp/ \
+  --header "Authorization: Bearer <token>"
+```
+
+Inside Claude Code, `/mcp` lists the registered server and its tools.
+
+### Connect from Claude Desktop (local stdio)
+
+For a local checkout (no auth, runs `python -m alt_bitnodes_mcp --stdio`):
+
+```json
+{
+  "mcpServers": {
+    "alt-bitnodes": {
+      "command": "/path/to/alt-bitnodes/venv/bin/python",
+      "args": ["-m", "alt_bitnodes_mcp", "--stdio"],
+      "cwd": "/path/to/alt-bitnodes",
+      "env": {
+        "BITNODES_EXPORT_DIR": "/path/to/bitnodes/data/export/f9beb4d9",
+        "RTT_DB_PATH": "/path/to/alt-bitnodes/data/rtt.sqlite"
+      }
+    }
+  }
+}
+```
+
+Drop that into Claude Desktop's `mcpServers` config (Settings → Developer
+→ Edit Config). Restart the app and the tools/resources/prompts appear.
+
+For the HTTPS server (any MCP-capable client), use the same URL and
+bearer pattern as the Claude Code example above; the JSON shape varies
+per client.
+
+### Rotating the bearer token
+
+```bash
+ssh -i $PEM_HNL ubuntu@<host> '
+  sudo rm /etc/alt-bitnodes/mcp-token
+  sudo bash ~/alt-bitnodes/deploy/install.sh   # regenerates + restarts the service
+'
+```
+
+Then re-distribute the new token to every client. `install.sh` is
+idempotent — if the file already exists it is left alone, so the only
+way to rotate is to delete it first.
+
+### Caveats
+
+- **Read-only.** No tool mutates Redis, no tool triggers a crawl.
+- **RTT is Virginia-anchored.** Samples are measured from the EC2 in
+  AWS `us-east-1`, so latency is partly geographic distance to Virginia.
+  See `docs/follow-ups.md` for the multi-location-probes follow-up.
+- **SSE timeout at 1 h.** nginx caps individual HTTP sessions at one
+  hour. Long-running MCP sessions reconnect automatically; if a client
+  doesn't, restart the session.
+- **One shared token.** Single-tenant by design. If you need per-client
+  identity, the MCP SDK supports OAuth — pending follow-up.
+
 ## Cost notes
 
 Current production sizing (c7g.2xlarge in us-east-1):
