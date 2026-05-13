@@ -105,7 +105,7 @@ setup_crawler() {
   for cfg in "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf"; do
     sudo -u "${INSTALL_USER}" sed -i "s|^user_agent = .*|user_agent = ${USER_AGENT}|" "${cfg}"
     sudo -u "${INSTALL_USER}" sed -i "s|^tor_proxies =.*|tor_proxies = 127.0.0.1:9050|" "${cfg}"
-    sudo -u "${INSTALL_USER}" sed -i "s|^socket_timeout = .*|socket_timeout = 30|" "${cfg}"
+    sudo -u "${INSTALL_USER}" sed -i "s|^socket_timeout = .*|socket_timeout = 60|" "${cfg}"
   done
 
   # t4g.medium has 2 vCPU + single-threaded Tor. Upstream defaults
