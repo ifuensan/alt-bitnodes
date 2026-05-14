@@ -2,6 +2,18 @@ const fmt = new Intl.NumberFormat("en-US");
 let currentNodes = [];
 let globeInitialized = false;
 
+// ISO-2 country code → full English name. Falls back to the raw code for
+// unknown / invalid codes (e.g. anonymising proxies).
+const _regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+function countryName(code) {
+  if (!code) return code;
+  try {
+    return _regionNames.of(code) || code;
+  } catch {
+    return code;
+  }
+}
+
 async function fetchJSON(url) {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`${url}: ${r.status}`);
@@ -51,18 +63,52 @@ function updateGlobe(stats) {
   }
 }
 
+const BAR_HEIGHT = 28;
+const BAR_MARGIN_TOP = 10;
+const BAR_MARGIN_BOTTOM = 34;
+const LABEL_MAX = 40;
+const MONO_FONT = "ui-monospace, SFMono-Regular, Menlo, monospace";
+// Width of one monospace char at 12px (measured ~7.2px; round up so the
+// computed left margin never under-sizes and clips the first character).
+const MONO_CHAR_PX = 7.5;
+const LABEL_PAD_LEFT = 14;
+
 function makeBarChart(containerId, labels, values, label) {
   const el = document.getElementById(containerId);
-  const data = labels.map((l, i) => ({ label: l, value: values[i] }));
-  const marginLeft = containerId === "chart-countries" ? 80 : 260;
+  const data = labels.map((l, i) => ({
+    label: l.length > LABEL_MAX ? l.slice(0, LABEL_MAX - 1) + "…" : l,
+    full: l,
+    value: values[i],
+  }));
+  // Height scales with bar count so labels never overlap.
+  const height = data.length * BAR_HEIGHT + BAR_MARGIN_TOP + BAR_MARGIN_BOTTOM;
+  // Fill the container's width instead of Plot's ~640px default.
+  const width = el.clientWidth || 640;
+  // Left margin sized from the longest (displayed) label, with padding so
+  // the first character is never clipped. Capped so a pathological label
+  // can't eat the whole bar width.
+  const longest = data.reduce((m, d) => Math.max(m, d.label.length), 0);
+  const marginLeft = Math.min(longest * MONO_CHAR_PX + LABEL_PAD_LEFT, 420);
   const chart = Plot.plot({
-    height: 240,
+    width,
+    height,
+    marginTop: BAR_MARGIN_TOP,
+    marginBottom: BAR_MARGIN_BOTTOM,
     marginLeft,
     marginRight: 24,
     x: { grid: true, label },
     y: { label: null },
     style: { background: "transparent", color: "#e6edf3", fontSize: "12px" },
     marks: [
+      // Left-aligned, monospaced Y-axis labels: variable-length version
+      // strings read as an aligned column instead of ragged right-aligned
+      // text. dx pulls the label to the SVG's left edge (+8px padding).
+      Plot.axisY({
+        textAnchor: "start",
+        fontFamily: MONO_FONT,
+        tickSize: 0,
+        dx: -marginLeft + 8,
+      }),
       Plot.barX(data, {
         x: "value",
         y: "label",
@@ -72,9 +118,13 @@ function makeBarChart(containerId, labels, values, label) {
       Plot.tip(data, Plot.pointerY({
         x: "value",
         y: "label",
+        title: (d) => `${d.full}\n${d.value}`,
         fill: "#0e1116",
         stroke: "#2d333b",
-        textPadding: 8,
+        // ~1.5x the base 12px text / 8px padding for easier reading on hover.
+        fontSize: 18,
+        textPadding: 12,
+        lineHeight: 1.3,
       })),
       Plot.ruleX([0], { stroke: "#2d333b" }),
     ],
@@ -131,15 +181,15 @@ async function loadSnapshot(ts) {
     new Date(ts * 1000).toISOString().replace("T", " ").slice(0, 19) + " UTC";
 
   makeBarChart("chart-countries",
-    stats.top_countries.map(([k]) => k),
+    stats.top_countries.map(([k]) => countryName(k)),
     stats.top_countries.map(([, v]) => v),
     "nodes");
   makeBarChart("chart-uas",
-    stats.top_user_agents.map(([k]) => k.length > 56 ? k.slice(0, 54) + "…" : k),
+    stats.top_user_agents.map(([k]) => k),
     stats.top_user_agents.map(([, v]) => v),
     "nodes");
   makeBarChart("chart-asns",
-    stats.top_asns.map(([k]) => k.length > 56 ? k.slice(0, 54) + "…" : k),
+    stats.top_asns.map(([k]) => k),
     stats.top_asns.map(([, v]) => v),
     "nodes");
 
