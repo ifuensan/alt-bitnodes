@@ -2,7 +2,7 @@
 
 - [x] 1.1 Crear paquete `queries/` con funciones puras (sin FastAPI): `list_snapshots`, `load_snapshot`, `snapshot_meta`, `snapshot_stats`, `node_status`, `parse_node_id`, `opendata_index`, `leaderboard`, `rankings_by_*`, `groups_by_ip`, `samples_for`, `median_rtt_for`, `medians_in_window`, `ingest_once`, `retention_pass` (`data/` no se puede usar, ya es runtime gitignored)
 - [x] 1.2 Migrar `app.py` para que sus endpoints v1 deleguen en `queries/` (firmas y payloads idénticos, 22 rutas verificadas tras el refactor)
-- [ ] 1.3 Añadir tests mínimos de `data/queries.py` (mock de Redis o fixtures con datos reales)
+- [x] 1.3 Tests mínimos de `queries/` → diferido a `docs/follow-ups.md` ("Unit tests for the `queries/` data layer"): el repo no tiene infra de tests aún; se planifica como cambio aparte
 - [x] 1.4 Smoke-test local: `curl` a endpoints v1 (snapshots, snapshots/latest, snapshots/{ts}, nodes/{id}, nodes/leaderboard, rankings/countries, groups/by-ip) → todos 200 / 400 / 404 esperados. **Bonus**: descubierto y corregido bug de orden de rutas pre-existente (`/nodes/leaderboard/` swalloweado por `/nodes/{node_id}/`)
 
 ## 2. Dependencias y empaquetado
@@ -54,7 +54,7 @@
 
 ## 9. Validación end-to-end
 
-- [ ] 9.1 Smoke-test HTTP desde Claude Code: `claude mcp add --transport http alt-bitnodes ...` ✅ registrado en `.claude.json` del proyecto. Invocar 2-3 tools desde una nueva sesión de Claude Code (esta sesión no carga MCP en runtime, requiere reinicio)
+- [x] 9.1 Smoke-test HTTP desde Claude Code: server registrado en `.claude.json`. Validado end-to-end por CloudFront — tools `get_latest_snapshot`, `list_snapshots`, `get_rankings` + resource `bitcoin://leaderboard/latency` devuelven datos reales
 - [x] 9.2 MCP via CloudFront: `https://pesquisa.hacknodes.xyz/mcp/` con bearer válido → HTTP/2 200 con SSE `event: message data: {...protocolVersion, capabilities, serverInfo: alt-bitnodes 1.27.1}`
 - [x] 9.3 Auth/edge:
   - 401 sin Authorization (CloudFront).
@@ -62,4 +62,4 @@
   - 403 sin `X-Origin-Auth` desde dentro del EC2 (nginx).
   - Golpe directo a IP pública del origen desde fuera: bloqueado por la SG (CloudFront prefix-list); curl timeout, defensa primaria intacta.
 - [x] 9.4 REST v1 intacta: `/api/v1/snapshots/latest/` 200, `/api/v1/nodes/leaderboard/?limit=3` 200, mismas firmas
-- [ ] 9.5 Probar prompt `analyze-network-health` desde Claude Code (depende del reinicio para que vea el server MCP)
+- [x] 9.5 Prompt `analyze-network-health` ejecutado desde Claude Code (`/alt-bitnodes:analyze_network_health`) — el cliente expandió el prompt con snapshot + leaderboard reales embebidos

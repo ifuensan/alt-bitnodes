@@ -73,6 +73,24 @@ Reconsider if abuse investigation ever needs CDN-side data — see
 `deploy/cloudformation/edge.yaml` comments and the public-edge
 research thread.
 
+## Testing
+
+### Unit tests for the `queries/` data layer
+
+**Status**: Deferred 2026-05-14 while archiving `expose-api-as-mcp`
+(task 1.3). The `queries/` package was extracted as a pure, FastAPI-free
+data layer precisely so it's testable, but the repo has no test infra
+yet (no `tests/`, no pytest config).
+
+**Idea**: Add `tests/` with minimal coverage of `queries/` — snapshot
+loading, RTT median helpers, leaderboard/rankings, `node_status`,
+`parse_node_id`. Either mock Redis/SQLite or run against fixtures with
+real snapshot JSON. Pulls in pytest as the first test dependency.
+
+**Why it matters**: both `app.py` and `alt_bitnodes_mcp/` now depend on
+`queries/`; a regression there breaks the REST API and the MCP server at
+once. Worth a safety net before the next refactor touches it.
+
 ## Crawler features
 
 ### I2P SAM crawl integration
