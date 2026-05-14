@@ -25,6 +25,6 @@
 
 ## 5. Despliegue
 
-- [ ] 5.1 Commit + push (workflow Deploy to EC2 corre install.sh)
-- [ ] 5.2 Invalidación CloudFront en `/static/app.js`, `/` (y `/static/app.css` no se tocó)
-- [ ] 5.3 Verificar en `https://pesquisa.hacknodes.xyz/` que el cambio está live
+- [x] 5.1 Commit + push (workflow Deploy to EC2 → success)
+- [x] 5.2 Invalidación CloudFront en `/static/app.js`, `/` → Completed
+- [x] 5.3 Verificado en `https://pesquisa.hacknodes.xyz/` — cambio live
