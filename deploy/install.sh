@@ -161,19 +161,18 @@ install_systemd_units() {
 
   systemctl daemon-reload
   systemctl enable bitnodes.service alt-bitnodes.service alt-bitnodes-mcp.service
-  # tcpdump-pcap is intentionally disabled. The sniffer's I/O + softirq
-  # load made snapshot counts oscillate 50–4000. With it off, snapshots
-  # stay flat at ~4000. Re-enable only once cache_inv has been ported to
-  # active pings — see docs/follow-ups.md.
-  # `disable --now` does NOT always stop a running unit (observed 2026-05-13
-  # where it stayed active=running after disable). Stop explicitly first,
-  # then disable; only swallow expected "already disabled" errors.
+  # tcpdump-pcap is intentionally NOT run. The sniffer's I/O + softirq load
+  # made snapshot counts oscillate 50–4000 (postmortem 2026-05-13). The real
+  # fix landed in bitnodes.service: tcpdump-pcap.service is no longer in its
+  # Wants=, so a crawler restart never pulls it in. The block below is just
+  # idempotent sanitation — it stops/kills any tcpdump left alive from an
+  # older configuration. `disable` is redundant now (nothing wants it, it was
+  # never enabled) but kept as defense in depth in case someone enables it by
+  # hand. pcap capture is opt-in: `systemctl start tcpdump-pcap.service`.
   systemctl stop    tcpdump-pcap.service || true
   systemctl stop    pcap-cleanup.timer   || true
   systemctl disable tcpdump-pcap.service 2>/dev/null || true
   systemctl disable pcap-cleanup.timer   2>/dev/null || true
-  # Belt and braces: if a tcpdump process is still alive (e.g. started
-  # outside systemd by an earlier run-tcpdump.sh invocation), kill it.
   pkill -f run-tcpdump.sh 2>/dev/null || true
   pkill -x tcpdump        2>/dev/null || true
   # Restart so re-runs pick up unit-file changes (enable --now is a no-op on

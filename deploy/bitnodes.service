@@ -1,7 +1,13 @@
 [Unit]
 Description=Bitnodes crawler stack (crawl + ping + resolve + export + seeder + cache_inv)
 After=network-online.target redis-server.service
-Wants=network-online.target tcpdump-pcap.service
+# tcpdump-pcap.service is deliberately NOT in Wants=. The sniffer's I/O
+# contention makes snapshot counts oscillate (postmortem 2026-05-13).
+# A Wants= dependency here would pull it in on every crawler restart even
+# while `systemctl disable`d — `disable` only removes boot symlinks, not
+# Wants=. pcap capture is opt-in: start tcpdump-pcap.service manually if
+# ever needed. See change fix-tcpdump-revival.
+Wants=network-online.target
 Requires=redis-server.service
 
 [Service]
