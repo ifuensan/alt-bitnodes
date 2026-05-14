@@ -46,6 +46,6 @@
 
 ## 8. Despliegue
 
-- [ ] 8.1 Commit + push (workflow Deploy to EC2 corre install.sh)
-- [ ] 8.2 Invalidación CloudFront en `/static/app.css`, `/static/app.js`, `/static/fonts/*`, `/`
-- [ ] 8.3 Verificar en `https://pesquisa.hacknodes.xyz/` que el re-skin está live en ambos temas
+- [x] 8.1 Commit + push (commit `ab88b12`, workflow Deploy to EC2 → success)
+- [x] 8.2 Invalidación CloudFront en `/static/app.css`, `/static/app.js`, `/static/fonts/*`, `/`
+- [x] 8.3 Verificar en `https://pesquisa.hacknodes.xyz/` que el re-skin está live en ambos temas

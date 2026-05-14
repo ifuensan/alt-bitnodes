@@ -33,15 +33,19 @@ Each bar chart SHALL display categorical labels on the Y axis and numeric counts
 - **THEN** the tooltip shows the complete, untruncated label together with its count
 
 ### Requirement: Dark theme styling
-Bar charts SHALL be styled to match the dashboard's dark theme.
+Bar charts SHALL be styled from the dashboard's design-system tokens and SHALL follow the active theme (dark or light), rather than hard-coded hex values.
 
 #### Scenario: Visual styling
 - **WHEN** a chart is rendered
-- **THEN** bars use the accent fill `#f7931a`, the figure background is transparent, axis text uses the page text color, and X-axis grid lines are visible
+- **THEN** bar fill comes from the `primary` token, the figure background is transparent, axis text uses the active theme's text token, and X-axis grid lines use a border token — all resolved from the current theme, not literal hex values
 
 #### Scenario: Dynamic height
 - **WHEN** a chart is rendered with `n` bars
 - **THEN** its height scales with `n` (a fixed per-bar height plus top/bottom margins) so every bar has enough vertical room for its label, instead of a fixed 240px height
+
+#### Scenario: Follows theme switch
+- **WHEN** the user toggles between dark and light themes
+- **THEN** the chart re-renders with the new theme's token values
 
 ### Requirement: Y-axis labels are left-aligned and monospaced
 To keep variable-length categorical labels (notably Bitcoin client versions) scannable, each bar chart SHALL render its Y-axis labels left-aligned at a consistent starting position, in a monospaced font.
