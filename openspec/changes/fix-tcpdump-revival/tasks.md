@@ -10,8 +10,8 @@
 
 ## 3. Despliegue y verificación
 
-- [ ] 3.1 Commit + push (workflow Deploy to EC2 corre install.sh, reinstala `bitnodes.service` con el nuevo `[Unit]`, daemon-reload, restart)
-- [ ] 3.2 Si quedara un tcpdump vivo del estado anterior: `ssh ... 'sudo systemctl stop tcpdump-pcap.service; sudo pkill -x tcpdump'` una vez
-- [ ] 3.3 Verificar: `systemctl show bitnodes.service tcpdump-pcap.service -p ExecMainStartTimestamp` → timestamps distintos
-- [ ] 3.4 Verificar: `journalctl -u tcpdump-pcap.service --since <deploy>` → sin nuevos `Started` tras el deploy
-- [ ] 3.5 Verificar: esperar ~15 min y confirmar que los snapshots convergen a ~4000+ sin oscilar (`ls -t ~/bitnodes/data/export/f9beb4d9/*.json | head -6`)
+- [x] 3.1 Commit + push (commit `20aec6b`, workflow Deploy to EC2 → success; install.sh reinstaló `bitnodes.service` con el nuevo `[Unit]`)
+- [x] 3.2 No hizo falta matar tcpdump a mano — `install.sh` (stop+pkill) dejó el host limpio
+- [x] 3.3 `ExecMainStartTimestamp`: bitnodes `17:46:18`, tcpdump-pcap **vacío** (no arrancó) — antes coincidían al segundo
+- [x] 3.4 `journalctl -u tcpdump-pcap.service --since <deploy>` → sin nuevos `Started` ✓
+- [x] 3.5 Snapshots monótonos crecientes sin oscilar: 3964 → 4028 → 4054 → 4075
