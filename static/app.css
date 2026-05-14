@@ -1,65 +1,196 @@
-:root {
-  --bg: #0e1116;
-  --panel: #161b22;
-  --border: #2d333b;
-  --text: #e6edf3;
-  --muted: #8b949e;
-  --accent: #f7931a;
+/* ===========================================================================
+   Pesquisa Dashboard — "OSINT terminal" design system.
+   Adapted from bitcoin-node-scanner/DESIGN.md: JetBrains Mono everywhere,
+   semantic color tokens (dark canonical + light opt-in), sharp corners,
+   no elevation. Color encodes meaning, never decoration.
+   =========================================================================== */
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/static/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
 }
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/static/fonts/JetBrainsMono-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/static/fonts/JetBrainsMono-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+
+/* --- Tokens: dark palette (canonical) ------------------------------------- */
+:root {
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --surface-2: #1a1a1a;
+  --border: #2a2a2a;
+  --border-dim: #1e1e1e;
+  --text: #e0e0e0;
+  --text-dim: #aaaaaa;
+  --muted: #888888;
+  --dim: #555555;
+  --primary: #f7931a;
+  --ok: #00ff9c;
+  --warn: #ffb000;
+  --alert: #ff4444;
+  --accent: #ff6fb5;
+  --ok-bg: #002a1a;
+  --warn-bg: #2a1f00;
+  --alert-bg: #2a0000;
+  --accent-bg: #2a0a1a;
+
+  /* spacing — 8px grid */
+  --xs: 4px;
+  --sm: 8px;
+  --md: 12px;
+  --lg: 16px;
+  --xl: 24px;
+
+  --font: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* --- Tokens: light palette (opt-in) -------------------------------------- */
+html[data-theme="light"] {
+  --bg: #f6f6f6;
+  --surface: #ffffff;
+  --surface-2: #ececec;
+  --border: #d4d4d4;
+  --border-dim: #e4e4e4;
+  --text: #1a1a1a;
+  --text-dim: #404040;
+  --muted: #5a5a5a;
+  --dim: #8a8a8a;
+  --primary: #f7931a;
+  --ok: #008f5c;
+  --warn: #a36a00;
+  --alert: #cc0000;
+  --accent: #a01055;
+  --ok-bg: #daf5e8;
+  --warn-bg: #fff4d6;
+  --alert-bg: #ffe5e5;
+  --accent-bg: #ffe3f0;
+}
+
 * { box-sizing: border-box; }
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.55;
   background: var(--bg);
   color: var(--text);
 }
+
+/* --- Header --------------------------------------------------------------- */
 header {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 16px 24px; border-bottom: 1px solid var(--border);
+  padding: var(--lg) var(--xl);
+  border-bottom: 1px solid var(--border);
 }
-header h1 { margin: 0; font-size: 18px; font-weight: 600; }
-.controls { display: flex; gap: 16px; align-items: center; font-size: 13px; color: var(--muted); }
+header h1 {
+  margin: 0;
+  font-size: 17px; font-weight: 500; line-height: 1.4;
+  color: var(--primary);
+}
+.controls {
+  display: flex; gap: var(--lg); align-items: center;
+  font-size: 11px; color: var(--muted);
+}
 .controls select {
-  background: var(--panel); color: var(--text); border: 1px solid var(--border);
-  padding: 4px 8px; border-radius: 6px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border);
+  font-family: var(--font); font-size: 12px;
+  padding: var(--xs) var(--sm); border-radius: 0;
 }
+#theme-toggle {
+  background: var(--surface-2); color: var(--text-dim);
+  border: 1px solid var(--border);
+  font-family: var(--font); font-size: 11px;
+  padding: var(--xs) var(--sm); border-radius: 0;
+  cursor: pointer;
+}
+#theme-toggle:hover { color: var(--text); }
+
+/* --- Stat tiles (KPIs) — one continuous strip, not floating cards --------- */
 .kpis {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
-  padding: 16px 24px;
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  margin: var(--lg) var(--xl);
+  background: var(--surface);
+  border: 1px solid var(--border);
 }
 .kpi {
-  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-  padding: 16px; display: flex; flex-direction: column; gap: 4px;
+  padding: var(--md);
+  display: flex; flex-direction: column; gap: var(--xs);
+  border-right: 1px solid var(--border-dim);
 }
-.kpi .value { font-size: 28px; font-weight: 600; color: var(--accent); }
-.kpi .label { font-size: 12px; color: var(--muted); text-transform: uppercase; }
+.kpi:last-child { border-right: none; }
+.kpi .value {
+  font-size: 16px; font-weight: 500;
+  color: var(--text);
+}
+.kpi .label {
+  font-size: 10px; font-weight: 500; letter-spacing: 0.6px;
+  text-transform: uppercase; color: var(--muted);
+}
+
+/* --- Panels --------------------------------------------------------------- */
+/* Row 1: Distribution + Top countries side by side (equal height — the grid
+   stretches both to the taller cell, and #globe is flex:1 so it fills it).
+   Rows 2-3: user agents and ASNs span the full width. */
 .grid {
-  display: grid; grid-template-columns: 1fr 2fr; gap: 16px;
-  padding: 0 24px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--lg);
+  padding: 0 var(--xl);
 }
 .panel {
-  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-  padding: 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 0;
+  padding: var(--md);
 }
-.panel h2 { margin: 0 0 12px; font-size: 14px; font-weight: 600; color: var(--muted); }
-.map-panel { grid-row: span 3; display: flex; flex-direction: column; }
-#globe { flex: 1; width: 100%; min-height: 280px; border-radius: 6px; }
-.table-panel { margin: 16px 24px; }
+.panel h2 {
+  margin: 0 0 var(--md);
+  font-size: 10px; font-weight: 500; letter-spacing: 0.6px;
+  text-transform: uppercase; color: var(--muted);
+}
+.panel-full { grid-column: 1 / -1; }
+.map-panel { display: flex; flex-direction: column; }
+#globe { flex: 1; width: 100%; min-height: 280px; border-radius: 0; }
+
+/* --- Tables --------------------------------------------------------------- */
+.table-panel { margin: var(--lg) var(--xl); }
 #filter {
-  width: 100%; padding: 8px 12px; margin-bottom: 12px;
-  background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px;
+  width: 100%; padding: var(--sm) var(--md); margin-bottom: var(--md);
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 0;
+  font-family: var(--font); font-size: 12px;
 }
 .table-wrap { max-height: 480px; overflow: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
-th { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-weight: 500; }
-tr:hover td { background: rgba(255,255,255,0.02); }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th, td {
+  padding: 9px var(--md); text-align: left;
+  border-bottom: 1px solid var(--border-dim);
+}
+th {
+  position: sticky; top: 0;
+  background: var(--surface-2); color: var(--muted);
+  font-weight: 500;
+}
+tr:hover td { background: var(--surface-2); }
+
+/* --- Charts --------------------------------------------------------------- */
 .plot { width: 100%; min-height: 240px; }
 .plot svg { display: block; }
 
+/* --- Footer --------------------------------------------------------------- */
 footer {
-  padding: 24px; border-top: 1px solid var(--border); margin-top: 16px;
-  color: var(--muted); font-size: 13px; text-align: center;
+  padding: var(--xl); border-top: 1px solid var(--border); margin-top: var(--lg);
+  color: var(--muted); font-size: 11px; text-align: center;
 }
-footer a { color: var(--accent); text-decoration: none; }
+footer a { color: var(--primary); text-decoration: none; }
 footer a:hover { text-decoration: underline; }

@@ -3,6 +3,21 @@
 <head>
 <meta charset="utf-8">
 <title>Pesquisa Dashboard</title>
+<script>
+  // Anti-FOUC: resolve the theme before first paint.
+  (function () {
+    try {
+      var t = localStorage.getItem("pesquisa:theme");
+      if (t !== "light" && t !== "dark") {
+        t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      }
+      document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+  })();
+</script>
+<link rel="preload" href="/static/fonts/JetBrainsMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
@@ -13,6 +28,7 @@
       <select id="snapshot-select"></select>
     </label>
     <span id="snapshot-meta"></span>
+    <button id="theme-toggle" type="button" aria-label="Toggle theme"></button>
   </div>
 </header>
 
@@ -33,11 +49,11 @@
     <h2>Top countries</h2>
     <div id="chart-countries" class="plot"></div>
   </div>
-  <div class="panel">
+  <div class="panel panel-full">
     <h2>Top user agents</h2>
     <div id="chart-uas" class="plot"></div>
   </div>
-  <div class="panel">
+  <div class="panel panel-full">
     <h2>Top ASNs</h2>
     <div id="chart-asns" class="plot"></div>
   </div>

@@ -1,6 +1,28 @@
 const fmt = new Intl.NumberFormat("en-US");
 let currentNodes = [];
+let currentStats = null;
 let globeInitialized = false;
+
+// Read the active theme's design tokens. Charts (Observable Plot, Plotly)
+// take colors as JS strings, so they can't use var(--token) directly —
+// resolve them at render time from CSS custom properties.
+function themeTokens() {
+  const cs = getComputedStyle(document.documentElement);
+  const t = (name) => cs.getPropertyValue(name).trim();
+  return {
+    bg: t("--bg"),
+    surface: t("--surface"),
+    surface2: t("--surface-2"),
+    border: t("--border"),
+    borderDim: t("--border-dim"),
+    text: t("--text"),
+    muted: t("--muted"),
+    primary: t("--primary"),
+    ok: t("--ok"),
+  };
+}
+
+const MONO_FONT_STACK = '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace';
 
 // ISO-2 country code → full English name. Falls back to the raw code for
 // unknown / invalid codes (e.g. anonymising proxies).
@@ -20,7 +42,34 @@ async function fetchJSON(url) {
   return r.json();
 }
 
+// The globe needs internal contrast that the general tokens don't provide
+// (in light mode every surface token is near-white). Give it a dedicated
+// per-theme palette: a dark land/ocean base + an orange density ramp that
+// stays legible on both themes.
+function globePalette() {
+  const tok = themeTokens();
+  if (currentTheme() === "light") {
+    return {
+      ocean: "#e4e4e4",
+      land: "#cfcfcf",
+      countryLine: "#f6f6f6",
+      panelBg: tok.surface,
+      // medium grey → orange: country shapes read against the light land
+      ramp: [[0, "#9a9a9a"], [0.5, "#c47a1f"], [1, tok.primary]],
+    };
+  }
+  return {
+    ocean: "#0a0a0a",
+    land: "#1f1f1f",
+    countryLine: "#0a0a0a",
+    panelBg: tok.surface,
+    ramp: [[0, "#2a2a2a"], [0.5, "#7a4d12"], [1, tok.primary]],
+  };
+}
+
 function updateGlobe(stats) {
+  const tok = themeTokens();
+  const g = globePalette();
   const locations = stats.countries_iso3.map(([iso3]) => iso3);
   const counts = stats.countries_iso3.map(([, c]) => c);
   const data = [{
@@ -28,31 +77,28 @@ function updateGlobe(stats) {
     locationmode: "ISO-3",
     locations,
     z: counts,
-    colorscale: [
-      [0,    "#1a2a1a"],
-      [0.25, "#244c24"],
-      [0.5,  "#3a8a3a"],
-      [0.75, "#7ad57a"],
-      [1,    "#cdf5cd"],
-    ],
+    // Node density as an orange ramp — the dashboard's data color is Bitcoin
+    // orange, not green. The ramp endpoints are tuned per theme so country
+    // shapes contrast against the land base in both.
+    colorscale: g.ramp,
     showscale: false,
-    marker: { line: { color: "#0e1116", width: 0.4 } },
+    marker: { line: { color: g.countryLine, width: 0.4 } },
     hovertemplate: "<b>%{location}</b><br>%{z} nodes<extra></extra>",
   }];
   const layout = {
     geo: {
       projection: { type: "orthographic", rotation: { lon: -30, lat: 25 } },
-      showocean: true, oceancolor: "#0a0d12",
-      showland: true,  landcolor: "#161b22",
-      showcountries: true, countrycolor: "#0e1116",
+      showocean: true, oceancolor: g.ocean,
+      showland: true,  landcolor: g.land,
+      showcountries: true, countrycolor: g.countryLine,
       showcoastlines: false,
       showframe: false,
-      bgcolor: "#161b22",
+      bgcolor: g.panelBg,
     },
-    paper_bgcolor: "#161b22",
-    plot_bgcolor: "#161b22",
+    paper_bgcolor: g.panelBg,
+    plot_bgcolor: g.panelBg,
     margin: { l: 0, r: 0, t: 0, b: 0 },
-    font: { color: "#e6edf3" },
+    font: { color: tok.text, family: MONO_FONT_STACK },
   };
   const config = { displayModeBar: false, responsive: true };
   if (globeInitialized) {
@@ -67,7 +113,6 @@ const BAR_HEIGHT = 28;
 const BAR_MARGIN_TOP = 10;
 const BAR_MARGIN_BOTTOM = 34;
 const LABEL_MAX = 40;
-const MONO_FONT = "ui-monospace, SFMono-Regular, Menlo, monospace";
 // Width of one monospace char at 12px (measured ~7.2px; round up so the
 // computed left margin never under-sizes and clips the first character).
 const MONO_CHAR_PX = 7.5;
@@ -75,6 +120,7 @@ const LABEL_PAD_LEFT = 14;
 
 function makeBarChart(containerId, labels, values, label) {
   const el = document.getElementById(containerId);
+  const tok = themeTokens();
   const data = labels.map((l, i) => ({
     label: l.length > LABEL_MAX ? l.slice(0, LABEL_MAX - 1) + "…" : l,
     full: l,
@@ -98,35 +144,35 @@ function makeBarChart(containerId, labels, values, label) {
     marginRight: 24,
     x: { grid: true, label },
     y: { label: null },
-    style: { background: "transparent", color: "#e6edf3", fontSize: "12px" },
+    style: { background: "transparent", color: tok.text, fontSize: "12px" },
     marks: [
       // Left-aligned, monospaced Y-axis labels: variable-length version
       // strings read as an aligned column instead of ragged right-aligned
       // text. dx pulls the label to the SVG's left edge (+8px padding).
       Plot.axisY({
         textAnchor: "start",
-        fontFamily: MONO_FONT,
+        fontFamily: MONO_FONT_STACK,
         tickSize: 0,
         dx: -marginLeft + 8,
       }),
       Plot.barX(data, {
         x: "value",
         y: "label",
-        fill: "#f7931a",
+        fill: tok.primary,
         sort: { y: "x", reverse: true },
       }),
       Plot.tip(data, Plot.pointerY({
         x: "value",
         y: "label",
         title: (d) => `${d.full}\n${d.value}`,
-        fill: "#0e1116",
-        stroke: "#2d333b",
+        fill: tok.surface,
+        stroke: tok.border,
         // ~1.5x the base 12px text / 8px padding for easier reading on hover.
         fontSize: 18,
         textPadding: 12,
         lineHeight: 1.3,
       })),
-      Plot.ruleX([0], { stroke: "#2d333b" }),
+      Plot.ruleX([0], { stroke: tok.border }),
     ],
   });
   el.replaceChildren(chart);
@@ -172,6 +218,7 @@ async function loadSnapshot(ts) {
     fetchJSON(`/api/snapshot/${t}/stats`),
   ]);
   currentNodes = snap.nodes;
+  currentStats = stats;
   document.getElementById("kpi-total").textContent = fmt.format(stats.total);
   document.getElementById("kpi-countries").textContent = fmt.format(stats.countries_total);
   document.getElementById("kpi-asns").textContent = fmt.format(stats.asns_total);
@@ -180,6 +227,14 @@ async function loadSnapshot(ts) {
   document.getElementById("snapshot-meta").textContent =
     new Date(ts * 1000).toISOString().replace("T", " ").slice(0, 19) + " UTC";
 
+  renderCharts(stats);
+  updateTable(currentNodes);
+  loadLeaderboard().catch(err => console.warn("leaderboard failed", err));
+}
+
+// Render the three bar charts + the globe from a stats payload. Split out so
+// the theme toggle can re-render with the new tokens without re-fetching.
+function renderCharts(stats) {
   makeBarChart("chart-countries",
     stats.top_countries.map(([k]) => countryName(k)),
     stats.top_countries.map(([, v]) => v),
@@ -192,10 +247,30 @@ async function loadSnapshot(ts) {
     stats.top_asns.map(([k]) => k),
     stats.top_asns.map(([, v]) => v),
     "nodes");
-
   updateGlobe(stats);
-  updateTable(currentNodes);
-  loadLeaderboard().catch(err => console.warn("leaderboard failed", err));
+}
+
+// --- Theme toggle ---------------------------------------------------------
+function currentTheme() {
+  return document.documentElement.getAttribute("data-theme") === "light"
+    ? "light" : "dark";
+}
+
+function setThemeToggleLabel() {
+  const btn = document.getElementById("theme-toggle");
+  if (btn) btn.textContent = currentTheme().toUpperCase();
+}
+
+function toggleTheme() {
+  const next = currentTheme() === "light" ? "dark" : "light";
+  document.documentElement.setAttribute("data-theme", next);
+  try {
+    localStorage.setItem("pesquisa:theme", next);
+  } catch (e) { /* localStorage unavailable — theme still applies for the session */ }
+  setThemeToggleLabel();
+  // Charts take colors as JS strings, so they must re-render to pick up the
+  // new token values.
+  if (currentStats) renderCharts(currentStats);
 }
 
 async function loadLeaderboard() {
@@ -226,6 +301,8 @@ async function init() {
   }
   select.addEventListener("change", e => loadSnapshot(Number.parseInt(e.target.value, 10)));
   document.getElementById("filter").addEventListener("input", applyFilter);
+  setThemeToggleLabel();
+  document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
 
   if (timestamps.length) {
     select.value = timestamps[timestamps.length - 1];
