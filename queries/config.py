@@ -14,16 +14,6 @@ EXPORT_DIR = Path(
 REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
 OPENDATA_TTL_SECONDS = 10
 
-# `data/` here is the runtime data directory (gitignored), not the Python package.
-RTT_DB_PATH = Path(
-    os.environ.get(
-        "RTT_DB_PATH",
-        str(Path(__file__).resolve().parent.parent / "data" / "rtt.sqlite"),
-    )
-)
-RTT_WINDOW_SECONDS = int(os.environ.get("RTT_WINDOW_SECONDS", "1800"))
-RTT_RETENTION_DAYS = int(os.environ.get("RTT_RETENTION_DAYS", "30"))
-
 FIELDS = [
     "address", "port", "protocol_version", "user_agent", "timestamp",
     "services", "height", "hostname", "city", "country",

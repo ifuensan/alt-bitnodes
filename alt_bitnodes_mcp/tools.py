@@ -9,32 +9,27 @@ from queries import (
     SnapshotMissingError,
     group_by_ip_detail,
     groups_by_ip,
-    leaderboard,
     list_snapshots as _list_snapshots,
     load_snapshot,
-    medians_in_window,
     node_status,
     parse_node_id,
     rankings_by_asn,
     rankings_by_country,
     rankings_by_user_agent,
-    samples_for,
     snapshot_meta,
     snapshot_stats,
     to_dict,
 )
-from queries.rtt import has_samples
 
 
 def _snapshot_payload(timestamp: int) -> dict:
     """Same shape as `/api/v1/snapshots/{ts}/`."""
     rows = load_snapshot(timestamp)
     heights = [r[6] for r in rows if isinstance(r[6], int) and r[6] > 0]
-    medians = medians_in_window()
     nodes: dict[str, list] = {}
     for r in rows:
         addr, port, proto, ua, ts, _services, height = r[0], r[1], r[2], r[3], r[4], r[5], r[6]
-        nodes[f"{addr}:{port}"] = [proto, ua, ts, medians.get((addr, port)), height]
+        nodes[f"{addr}:{port}"] = [proto, ua, ts, height]
     return {
         "timestamp": timestamp,
         "total_nodes": len(rows),
@@ -83,42 +78,6 @@ def register(mcp: FastMCP) -> None:
             except FileNotFoundError:
                 continue
         return {"count": len(results), "results": results}
-
-    @mcp.tool()
-    def get_leaderboard(
-        limit: int = 50,
-        by: Literal["latency", "uptime"] = "latency",
-        country: str | None = None,
-        asn: str | None = None,
-    ) -> dict:
-        """Return the fastest nodes by median RTT (latency). `by="uptime"` is
-        accepted for forward-compat but currently sorts identically to latency."""
-        if limit < 1 or limit > 500:
-            return {"error": "limit must be between 1 and 500"}
-        try:
-            results = leaderboard(country=country, asn=asn, limit=limit)
-        except NoSnapshotsError:
-            return {"error": "no snapshots available yet"}
-        except SnapshotMissingError:
-            return {"error": "latest snapshot missing on disk"}
-        return {"count": len(results), "by": by, "results": results}
-
-    @mcp.tool()
-    def get_node_rtt(address: str, port: int, hours: int = 24) -> dict:
-        """Return the RTT time series for a node over the last `hours` hours."""
-        if hours < 1 or hours > 168:
-            return {"error": "hours must be between 1 and 168"}
-        if port < 1 or port > 65535:
-            return {"error": "port must be 1-65535"}
-        from queries.snapshots import known_addresses_set
-        if (address, port) not in known_addresses_set() and not has_samples(address, port):
-            return {"error": "node not found"}
-        return {
-            "address": address,
-            "port": port,
-            "hours": hours,
-            "latency": samples_for(address, port, hours),
-        }
 
     @mcp.tool()
     def get_node_details(address: str, port: int) -> dict:
@@ -179,7 +138,7 @@ def register(mcp: FastMCP) -> None:
         if not snaps:
             return {"error": "no snapshots available yet"}
         try:
-            stats = snapshot_stats(snaps[-1], medians_now=list(medians_in_window().values()))
+            stats = snapshot_stats(snaps[-1])
         except FileNotFoundError:
             return {"error": "latest snapshot missing on disk"}
 

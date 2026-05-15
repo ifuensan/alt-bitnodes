@@ -34,7 +34,7 @@ install_apt_packages() {
     build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev \
     libsqlite3-dev libncursesw5-dev xz-utils tk-dev libxml2-dev \
     libxmlsec1-dev libffi-dev liblzma-dev curl wget git ca-certificates \
-    redis-server tcpdump sqlite3 tor nginx
+    redis-server sqlite3 tor nginx
   systemctl enable --now redis-server
   systemctl enable --now tor
 }
@@ -142,39 +142,17 @@ install_systemd_units() {
   install -m 0644 "${DASHBOARD_DIR}/deploy/bitnodes.service" /etc/systemd/system/bitnodes.service
   install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes.service" /etc/systemd/system/alt-bitnodes.service
   install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes-mcp.service" /etc/systemd/system/alt-bitnodes-mcp.service
-  install -m 0644 "${DASHBOARD_DIR}/deploy/tcpdump-pcap.service" /etc/systemd/system/tcpdump-pcap.service
   install -m 0644 "${DASHBOARD_DIR}/deploy/geoip-update.service" /etc/systemd/system/geoip-update.service
   install -m 0644 "${DASHBOARD_DIR}/deploy/geoip-update.timer" /etc/systemd/system/geoip-update.timer
-  install -m 0644 "${DASHBOARD_DIR}/deploy/pcap-cleanup.service" /etc/systemd/system/pcap-cleanup.service
-  install -m 0644 "${DASHBOARD_DIR}/deploy/pcap-cleanup.timer" /etc/systemd/system/pcap-cleanup.timer
   install -m 0755 "${DASHBOARD_DIR}/deploy/run-bitnodes.sh" "${CRAWLER_DIR}/run-bitnodes.sh"
-  install -m 0755 "${DASHBOARD_DIR}/deploy/run-tcpdump.sh"  "${CRAWLER_DIR}/run-tcpdump.sh"
-  chown "${INSTALL_USER}:${INSTALL_USER}" "${CRAWLER_DIR}/run-bitnodes.sh" "${CRAWLER_DIR}/run-tcpdump.sh"
-
-  sudo -u "${INSTALL_USER}" mkdir -p "${CRAWLER_DIR}/data/pcap/f9beb4d9"
+  chown "${INSTALL_USER}:${INSTALL_USER}" "${CRAWLER_DIR}/run-bitnodes.sh"
 
   sed -i "s|__USER__|${INSTALL_USER}|g; s|__CRAWLER_DIR__|${CRAWLER_DIR}|g; s|__DASHBOARD_DIR__|${DASHBOARD_DIR}|g; s|__EXPORT_DIR__|${CRAWLER_DIR}/data/export/f9beb4d9|g" \
     /etc/systemd/system/bitnodes.service /etc/systemd/system/alt-bitnodes.service \
-    /etc/systemd/system/alt-bitnodes-mcp.service /etc/systemd/system/tcpdump-pcap.service \
-    /etc/systemd/system/geoip-update.service /etc/systemd/system/pcap-cleanup.service \
-    "${CRAWLER_DIR}/run-tcpdump.sh"
+    /etc/systemd/system/alt-bitnodes-mcp.service /etc/systemd/system/geoip-update.service
 
   systemctl daemon-reload
   systemctl enable bitnodes.service alt-bitnodes.service alt-bitnodes-mcp.service
-  # tcpdump-pcap is intentionally NOT run. The sniffer's I/O + softirq load
-  # made snapshot counts oscillate 50–4000 (postmortem 2026-05-13). The real
-  # fix landed in bitnodes.service: tcpdump-pcap.service is no longer in its
-  # Wants=, so a crawler restart never pulls it in. The block below is just
-  # idempotent sanitation — it stops/kills any tcpdump left alive from an
-  # older configuration. `disable` is redundant now (nothing wants it, it was
-  # never enabled) but kept as defense in depth in case someone enables it by
-  # hand. pcap capture is opt-in: `systemctl start tcpdump-pcap.service`.
-  systemctl stop    tcpdump-pcap.service || true
-  systemctl stop    pcap-cleanup.timer   || true
-  systemctl disable tcpdump-pcap.service 2>/dev/null || true
-  systemctl disable pcap-cleanup.timer   2>/dev/null || true
-  pkill -f run-tcpdump.sh 2>/dev/null || true
-  pkill -x tcpdump        2>/dev/null || true
   # Restart so re-runs pick up unit-file changes (enable --now is a no-op on
   # already-running services; we explicitly want them to reload config).
   systemctl restart bitnodes.service alt-bitnodes.service alt-bitnodes-mcp.service

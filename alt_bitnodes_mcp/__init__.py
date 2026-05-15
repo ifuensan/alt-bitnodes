@@ -1,5 +1,6 @@
 """MCP server for alt-bitnodes — exposes Bitcoin network data
-(snapshots, leaderboard, RTT, charts) as MCP tools, resources, and prompts.
+(snapshots, rankings, IP groups, charts, node details) as MCP tools,
+resources, and prompts.
 
 Reuses the same Redis-backed query layer (`queries/`) that the REST API uses.
 """

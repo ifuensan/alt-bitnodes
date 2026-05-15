@@ -1,9 +1,0 @@
-[Unit]
-Description=Delete tcpdump pcap files older than 5 minutes
-After=tcpdump-pcap.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/find __CRAWLER_DIR__/data/pcap/f9beb4d9/ -name "*.pcap*" -mmin +5 -delete
-
-

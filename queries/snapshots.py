@@ -1,7 +1,6 @@
 """Snapshot file loading and summary stats."""
 
 import json
-import statistics
 from collections import Counter
 from functools import lru_cache
 
@@ -58,13 +57,8 @@ def known_addresses_set() -> set:
     return _addresses_state["set"]
 
 
-def snapshot_stats(timestamp: int, medians_now: list[int] | None = None) -> dict:
-    """Compute distribution stats over one snapshot.
-
-    `medians_now` is the list of in-window median RTTs across nodes, used to
-    derive the overall `median_latency_ms`. Caller passes it in to avoid pulling
-    `queries.rtt` from inside `queries.snapshots` (keeps deps acyclic).
-    """
+def snapshot_stats(timestamp: int) -> dict:
+    """Compute distribution stats over one snapshot."""
     rows = load_snapshot(timestamp)
 
     countries = Counter(r[9] for r in rows if r[9])
@@ -80,10 +74,6 @@ def snapshot_stats(timestamp: int, medians_now: list[int] | None = None) -> dict
         if iso3:
             countries_iso3.append([iso3, count])
 
-    median_latency_ms = (
-        int(statistics.median(medians_now)) if medians_now else None
-    )
-
     return {
         "timestamp": timestamp,
         "total": len(rows),
@@ -91,7 +81,6 @@ def snapshot_stats(timestamp: int, medians_now: list[int] | None = None) -> dict
         "asns_total": len(asns),
         "user_agents_total": len(user_agents),
         "median_height": median_height,
-        "median_latency_ms": median_latency_ms,
         "top_countries": countries.most_common(15),
         "top_user_agents": user_agents.most_common(15),
         "top_asns": asns.most_common(15),

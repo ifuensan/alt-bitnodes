@@ -7,7 +7,6 @@ import redis
 
 from queries.config import OPENDATA_TTL_SECONDS
 from queries.redis_client import get_redis
-from queries.rtt import median_rtt_for
 from queries.snapshots import known_addresses_set
 
 
@@ -67,7 +66,7 @@ def _node_up_payload(item, addr: str, port: int) -> dict:
     return {
         "address": addr,
         "status": "UP",
-        "data": [proto, ua, last_seen, median_rtt_for(addr, port), _node_height(addr, port, services)],
+        "data": [proto, ua, last_seen, _node_height(addr, port, services)],
     }
 
 
@@ -81,6 +80,6 @@ def node_status(addr: str, port: int) -> dict | None:
         return {
             "address": addr,
             "status": "DOWN",
-            "data": [None, None, None, median_rtt_for(addr, port), None],
+            "data": [None, None, None, None],
         }
     return None

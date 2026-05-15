@@ -7,20 +7,11 @@ from mcp.server.fastmcp import FastMCP
 from queries import (
     NoSnapshotsError,
     SnapshotMissingError,
-    leaderboard,
     list_snapshots,
     load_snapshot,
-    medians_in_window,
     rankings_by_country,
     snapshot_meta,
     snapshot_stats,
-)
-
-
-_LATENCY_CAVEAT = (
-    "Caveat: RTT samples are measured from a single probe in AWS us-east-1 "
-    "(Virginia), so latency is partly geographic distance to Virginia, not a "
-    "general 'node response time'."
 )
 
 
@@ -29,7 +20,7 @@ def _safe_latest_stats() -> dict | None:
     if not snaps:
         return None
     try:
-        return snapshot_stats(snaps[-1], medians_now=list(medians_in_window().values()))
+        return snapshot_stats(snaps[-1])
     except FileNotFoundError:
         return None
 
@@ -37,15 +28,11 @@ def _safe_latest_stats() -> dict | None:
 def register(mcp: FastMCP) -> None:
     @mcp.prompt(title="Analyse Bitcoin network health")
     def analyze_network_health() -> str:
-        """Embed latest snapshot summary + leaderboard and ask for a health analysis."""
+        """Embed latest snapshot summary and ask for a health analysis."""
         stats = _safe_latest_stats()
         if stats is None:
             return "No snapshots are available yet on alt-bitnodes. Try again later."
-        try:
-            top = leaderboard(limit=10)
-        except (NoSnapshotsError, SnapshotMissingError):
-            top = []
-        payload = {"stats": stats, "top_10_by_latency": top}
+        payload = {"stats": stats}
         return (
             "You are analysing the current health of the Bitcoin peer-to-peer network "
             "using a snapshot from alt-bitnodes.\n\n"
@@ -54,9 +41,7 @@ def register(mcp: FastMCP) -> None:
             "1. Reachable node count and how it compares to the median Bitcoin network of recent years (~15k).\n"
             "2. Geographic distribution (top countries, concentration).\n"
             "3. Client diversity (top user agents, share of Core vs. forks/knots).\n"
-            "4. Latency outliers from the top-10.\n"
-            "5. Any red flags (e.g. one ASN >50%, single country dominance).\n\n"
-            f"{_LATENCY_CAVEAT}"
+            "4. Any red flags (e.g. one ASN >50%, single country dominance).\n"
         )
 
     @mcp.prompt(title="Compare two snapshots")
@@ -91,27 +76,6 @@ def register(mcp: FastMCP) -> None:
             "Discuss: net change in reachable count, churn (appeared vs disappeared), "
             "and whether the delta is consistent with normal node turnover or suggests "
             "an external event (Tor outage, geographic incident, fork)."
-        )
-
-    @mcp.prompt(title="Latency report")
-    def latency_report(country: str | None = None) -> str:
-        """Top-latency report, optionally filtered by ISO-2 country code."""
-        try:
-            results = leaderboard(country=country, limit=20)
-        except NoSnapshotsError:
-            return "No snapshots available yet."
-        except SnapshotMissingError:
-            return "Latest snapshot missing on disk."
-
-        scope = f"in country {country}" if country else "globally"
-        payload = {"scope": scope, "top_20_by_latency": results}
-        return (
-            f"Produce a latency report for the top-20 fastest Bitcoin nodes {scope}, "
-            "from alt-bitnodes snapshots.\n\n"
-            f"```json\n{json.dumps(payload, separators=(',',':'))}\n```\n\n"
-            "Cover: latency distribution, ASN concentration in the fastest 20, "
-            "and any outliers (extremely low or unexpectedly high).\n\n"
-            f"{_LATENCY_CAVEAT}"
         )
 
     @mcp.prompt(title="Network distribution summary")

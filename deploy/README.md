@@ -127,78 +127,17 @@ ls -la ~/bitnodes/geoip/*.mmdb              # mtime should refresh
 
 The timer runs every Wednesday at 06:00 with up to 30 min jitter. `Persistent=true` reruns missed cycles when the box was off. To check the last run: `journalctl -u geoip-update.service`.
 
-## RTT history & latency endpoints
+## API smoke test
 
-> ⚠️ **Disabled by default since May 2026.** `tcpdump-pcap.service`
-> caused snapshot oscillation (50–4000 nodes randomly) due to its I/O
-> and softirq load competing with the crawler. `install.sh` therefore
-> calls `systemctl disable --now tcpdump-pcap.service pcap-cleanup.timer`.
-> Snapshots are now flat at ~4000 reachable, but `latency_ms` /
-> leaderboard / `/api/v1/nodes/.../rtt/` return null until the
-> follow-up to **replace the pcap pipeline with active pings** is
-> implemented — see `docs/follow-ups.md` and
-> `docs/postmortems/2026-05-13-resize-and-i2p-research.md`.
-
-The dashboard process maintains a SQLite file populated by an in-process ingest task that copies fresh `rtt:<addr>-<port>` entries out of Redis on a fixed cadence. RTT samples are produced upstream by `bitnodes/cache_inv.py`, which consumes rotating pcap files written by `tcpdump-pcap.service`.
-
-The systemd graph is:
-
-```
-tcpdump-pcap.service  →  data/pcap/f9beb4d9/*.pcap  →  cache_inv (inside bitnodes.service)  →  Redis rtt:*  →  alt-bitnodes ingest  →  data/rtt.sqlite
-```
-
-`tcpdump-pcap.service` runs as root (needs CAP_NET_RAW), drops privileges to the install user via `tcpdump -Z`, auto-detects the default-route interface (do not use `-i any` — that produces LINUX_SLL2 link-layer that `dpkt.ethernet` cannot parse), and applies a Bitcoin-magic-bytes BPF filter so disk usage stays small.
-
-Env vars on the dashboard service (all optional):
-
-| Var | Default | Notes |
-|-----|---------|-------|
-| `RTT_DB_PATH` | `<DASHBOARD_DIR>/data/rtt.sqlite` (set in alt-bitnodes.service) | SQLite file location. Parent dir is created if missing. |
-| `RTT_INGEST_INTERVAL_SECONDS` | `30` | Must be < upstream `rtt_ttl` (see `~/bitnodes/conf/ping.conf`) so samples don't expire before ingest. |
-| `RTT_WINDOW_SECONDS` | `1800` | Window over which `latency_ms` is computed (median). |
-| `RTT_RETENTION_DAYS` | `30` | Older samples are pruned daily. |
-| `RTT_INGEST_ENABLED` | `true` | Set `false` on read-only replicas (only one process per DB file should write). |
-
-### Smoke test
-
-After deploy, wait one ingest interval (≥30s) and run:
+After deploy, hit a few endpoints:
 
 ```bash
-curl -s http://localhost:8000/api/v1/nodes/leaderboard/?limit=5 | jq
 curl -s http://localhost:8000/api/v1/rankings/countries/ | jq '.results[:5]'
 curl -s http://localhost:8000/api/v1/rankings/asns/      | jq '.results[:5]'
 curl -s http://localhost:8000/api/v1/rankings/user-agents/ | jq '.results[:5]'
 curl -s http://localhost:8000/api/v1/groups/by-ip/        | jq '.results[:5]'
-NODE=$(curl -s http://localhost:8000/api/v1/snapshots/latest/ | jq -r '.nodes | keys[0]' | sed 's/:/-/')
-curl -s "http://localhost:8000/api/v1/nodes/$NODE/rtt/?hours=24" | jq
-sqlite3 "${RTT_DB_PATH:-$HOME/alt-bitnodes/data/rtt.sqlite}" \
-  'SELECT count(*), datetime(min(ts),"unixepoch"), datetime(max(ts),"unixepoch") FROM rtt_samples'
+curl -s http://localhost:8000/api/v1/snapshots/latest/    | jq '.total_nodes'
 ```
-
-If `leaderboard.results` stays empty for several minutes, walk the chain:
-
-```bash
-systemctl status tcpdump-pcap                         # producer healthy?
-ls ~/bitnodes/data/pcap/f9beb4d9/                     # *.pcap appearing/being consumed
-journalctl -u bitnodes -g cache_inv | tail            # 'pkt=N pong=M' — pong>0 means pcap parses OK
-redis-cli --scan --pattern 'rtt:*' | wc -l            # >0 once cache_inv has produced samples
-journalctl -u alt-bitnodes -g 'rtt ingest' | tail     # ingest is running
-```
-
-`pkt=0` from cache_inv means tcpdump is writing in a link-layer format dpkt cannot parse. Confirm the unit is using a real interface (not `any`); `tcpdump-pcap.service` auto-picks via `ip route get 1.1.1.1`, but you can override with `Environment=TCPDUMP_IFACE=ens5` in `systemctl edit tcpdump-pcap.service`.
-
-### Rollback
-
-```bash
-sudo systemctl stop alt-bitnodes tcpdump-pcap
-# either: keep the DB and disable writes
-sudo systemctl edit alt-bitnodes  # add Environment=RTT_INGEST_ENABLED=false
-# or: drop the DB entirely
-rm ~/alt-bitnodes/data/rtt.sqlite
-sudo systemctl start alt-bitnodes  # leave tcpdump-pcap stopped if you want zero capture
-```
-
-`latency_ms` reverts to `null` in v1 payloads; existing fields keep their shape.
 
 ## Public edge (CloudFront + nginx)
 
@@ -343,14 +282,12 @@ store, no writes.
 
 Surface:
 
-- **12 tools** — `get_latest_snapshot`, `list_snapshots`, `get_snapshot_by_timestamp`,
-  `get_leaderboard`, `get_node_rtt`, `get_node_details`, `search_nodes`,
-  `get_chart_data`, `get_ip_groups`, `get_ip_group_detail`, `get_rankings`,
-  `parse_node_id_str`.
-- **4 resources** — `bitcoin://snapshot/latest`, `bitcoin://snapshot/{timestamp}`,
-  `bitcoin://leaderboard/latency`, `bitcoin://leaderboard/uptime`.
-- **4 prompts** — `analyze-network-health`, `compare-snapshots`,
-  `latency-report`, `network-distribution-summary`.
+- **10 tools** — `get_latest_snapshot`, `list_snapshots`, `get_snapshot_by_timestamp`,
+  `get_node_details`, `search_nodes`, `get_chart_data`, `get_ip_groups`,
+  `get_ip_group_detail`, `get_rankings`, `parse_node_id_str`.
+- **2 resources** — `bitcoin://snapshot/latest`, `bitcoin://snapshot/{timestamp}`.
+- **3 prompts** — `analyze-network-health`, `compare-snapshots`,
+  `network-distribution-summary`.
 
 Two transports:
 
@@ -389,8 +326,7 @@ For a local checkout (no auth, runs `python -m alt_bitnodes_mcp --stdio`):
       "args": ["-m", "alt_bitnodes_mcp", "--stdio"],
       "cwd": "/path/to/alt-bitnodes",
       "env": {
-        "BITNODES_EXPORT_DIR": "/path/to/bitnodes/data/export/f9beb4d9",
-        "RTT_DB_PATH": "/path/to/alt-bitnodes/data/rtt.sqlite"
+        "BITNODES_EXPORT_DIR": "/path/to/bitnodes/data/export/f9beb4d9"
       }
     }
   }
@@ -420,9 +356,6 @@ way to rotate is to delete it first.
 ### Caveats
 
 - **Read-only.** No tool mutates Redis, no tool triggers a crawl.
-- **RTT is Virginia-anchored.** Samples are measured from the EC2 in
-  AWS `us-east-1`, so latency is partly geographic distance to Virginia.
-  See `docs/follow-ups.md` for the multi-location-probes follow-up.
 - **SSE timeout at 1 h.** nginx caps individual HTTP sessions at one
   hour. Long-running MCP sessions reconnect automatically; if a client
   doesn't, restart the session.
