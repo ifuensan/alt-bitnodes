@@ -7,16 +7,6 @@ see `_bmad-output/planning-artifacts/`.
 
 ## Operational
 
-### Skip CI deploy on doc-only / openspec-only pushes
-
-**Status**: Discussed and deferred 2026-05-12. User chose option C
-("accept the restart per push"). May revisit if the friction
-becomes meaningful once active crawler-code branches are in flight.
-
-**Idea**: `.github/workflows/deploy.yml` only runs `install.sh` when
-the diff touches `app.py`, `deploy/`, `static/`, `templates/`,
-`requirements.txt`. Otherwise no-op.
-
 ### CloudFront access logs to S3
 
 **Status**: Sonar hotspot `cloudformation:S6258` marked Safe

@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Defines the MCP (Model Context Protocol) server `alt_bitnodes_mcp` that exposes alt-bitnodes network data (snapshots, leaderboard, RTT, charts, node details) to MCP clients as tools, resources, and prompts. Covers transports (stdio + Streamable HTTP), bearer-token auth, the public edge integration, deployment, and the contract that the REST API v1 stays unchanged.
+Defines the MCP (Model Context Protocol) server `alt_bitnodes_mcp` that exposes alt-bitnodes network data (snapshots, charts, node details, rankings, IP groups) to MCP clients as tools, resources, and prompts. Covers transports (stdio + Streamable HTTP), bearer-token auth, the public edge integration, deployment, and the contract that the REST API v1 stays unchanged. RTT/latency data is intentionally not exposed — that subsystem was removed in the `remove-rtt-pipeline` change.
 
 ## Requirements
 
 ### Requirement: MCP server exposes Bitcoin network data via Model Context Protocol
 
-The system SHALL provide an MCP server (`alt_bitnodes_mcp`) that exposes alt-bitnodes data (snapshots, leaderboard, RTT, charts, node details) to MCP clients. The server SHALL use the official Python `mcp` SDK (FastMCP) and SHALL reuse the same Redis-backed data layer as the REST API v1 (via the shared `queries/` package), with no duplicated business logic.
+The system SHALL provide an MCP server (`alt_bitnodes_mcp`) that exposes alt-bitnodes data (snapshots, charts, node details, rankings, IP groups) to MCP clients. The server SHALL use the official Python `mcp` SDK (FastMCP) and SHALL reuse the same data layer as the REST API v1 (via the shared `queries/` package), with no duplicated business logic. The server SHALL NOT expose RTT/latency data — that subsystem has been removed.
 
 #### Scenario: Server starts and registers MCP primitives
 - **WHEN** the server process starts
@@ -16,7 +16,7 @@ The system SHALL provide an MCP server (`alt_bitnodes_mcp`) that exposes alt-bit
 
 #### Scenario: Read-only contract
 - **WHEN** an MCP client invokes any tool
-- **THEN** the tool reads from Redis (or other read-only sources) and SHALL NOT mutate persistent state, write to Redis keys consumed by the crawler, trigger network crawls, or alter user data
+- **THEN** the tool reads from read-only sources and SHALL NOT mutate persistent state, write to Redis keys consumed by the crawler, trigger network crawls, or alter user data
 
 ### Requirement: MCP server supports stdio and Streamable HTTP transports
 
@@ -71,37 +71,34 @@ The server SHALL expose at minimum the following tools, each backed by `queries/
 - `get_latest_snapshot()`
 - `get_snapshot_by_timestamp(timestamp: int)`
 - `list_snapshots(limit: int = 20)`
-- `get_leaderboard(limit: int = 50, by: "latency" | "uptime" = "latency")`
-- `get_node_rtt(address: str, port: int, hours: int = 24)`
 - `get_node_details(address: str, port: int)`
 - `search_nodes(country: str | None = None, asn: int | None = None, version: str | None = None, network: "ipv4" | "ipv6" | "onion" | "i2p" | None = None)`
 - `get_chart_data(chart: "reachable" | "by_country" | "by_version", window: "24h" | "7d" | "30d" = "24h")`
+- `get_rankings(by: "country" | "asn" | "user_agent")`
+- `get_ip_groups(min_nodes: int = 2)`
+- `get_ip_group_detail(address: str)`
+
+There SHALL be no `get_leaderboard` or `get_node_rtt` tool — the RTT/latency data they served has been removed.
 
 #### Scenario: Latest snapshot
 - **WHEN** the client calls `get_latest_snapshot()`
-- **THEN** the server returns the most recent snapshot metadata and node count from Redis as a JSON object
+- **THEN** the server returns the most recent snapshot metadata and node count as a JSON object
 
-#### Scenario: Leaderboard with default ordering
-- **WHEN** the client calls `get_leaderboard()` without arguments
-- **THEN** the server returns the top 50 nodes ordered by latency, matching the data served by `/api/v1/nodes/leaderboard/`
-
-#### Scenario: Node RTT history
-- **WHEN** the client calls `get_node_rtt(address="1.2.3.4", port=8333, hours=24)`
-- **THEN** the server returns the RTT samples for the last 24 hours from Redis, in the same shape as `/api/v1/nodes/1.2.3.4-8333/rtt/`
+#### Scenario: No RTT or leaderboard tools
+- **WHEN** the client lists tools
+- **THEN** the tool list SHALL NOT include `get_leaderboard` or `get_node_rtt`
 
 #### Scenario: Invalid input
 - **WHEN** the client calls a tool with arguments that violate the declared schema (e.g. negative `hours`)
 - **THEN** the server returns an MCP error response without invoking the data layer
 
-### Requirement: Resources expose snapshots and leaderboards by URI
+### Requirement: Resources expose snapshots by URI
 
 The server SHALL expose the following MCP resources with URIs:
 - `bitcoin://snapshot/latest`
 - `bitcoin://snapshot/{timestamp}`
-- `bitcoin://leaderboard/latency`
-- `bitcoin://leaderboard/uptime`
 
-Each resource SHALL return JSON whose schema matches the corresponding REST endpoint payload.
+Each resource SHALL return JSON whose schema matches the corresponding REST endpoint payload. There SHALL be no `bitcoin://leaderboard/*` resources.
 
 #### Scenario: Read latest snapshot resource
 - **WHEN** the client reads `bitcoin://snapshot/latest`
@@ -109,25 +106,24 @@ Each resource SHALL return JSON whose schema matches the corresponding REST endp
 
 #### Scenario: List resources
 - **WHEN** the client lists resources
-- **THEN** the server enumerates the four URI patterns above, including the parameterised `bitcoin://snapshot/{timestamp}` as a resource template
+- **THEN** the server enumerates the snapshot URI patterns above, including the parameterised `bitcoin://snapshot/{timestamp}` as a resource template, and SHALL NOT enumerate any `bitcoin://leaderboard/*` resource
 
 ### Requirement: Prompts provide pre-built analysis flows
 
 The server SHALL expose at minimum the following prompts:
 - `analyze-network-health`
 - `compare-snapshots(t1, t2)`
-- `latency-report(country?)`
 - `network-distribution-summary`
 
-Each prompt SHALL produce a structured message sequence suitable for handing to an LLM, embedding relevant data fetched via the same `queries/` helpers.
+Each prompt SHALL produce a structured message sequence suitable for handing to an LLM, embedding relevant data fetched via the same `queries/` helpers. There SHALL be no `latency-report` prompt.
 
 #### Scenario: analyze-network-health
 - **WHEN** the client invokes `analyze-network-health` with no arguments
-- **THEN** the server returns a prompt that includes the latest snapshot summary and leaderboard, and asks the model to analyse network health (counts trend, top countries, version mix, latency outliers)
+- **THEN** the server returns a prompt that includes the latest snapshot summary and asks the model to analyse network health (counts trend, top countries, version mix) — with no latency/RTT content
 
-#### Scenario: latency-report with country filter
-- **WHEN** the client invokes `latency-report(country="ES")`
-- **THEN** the server returns a prompt limited to nodes in Spain, including the caveat that latency is measured from the Virginia probe
+#### Scenario: No latency-report prompt
+- **WHEN** the client lists prompts
+- **THEN** the prompt list SHALL NOT include `latency-report`
 
 ### Requirement: Deployment is automated via install.sh and systemd
 
@@ -159,8 +155,8 @@ Each prompt SHALL produce a structured message sequence suitable for handing to 
 
 ### Requirement: REST API v1 remains unchanged in public behaviour
 
-The introduction of the MCP server SHALL NOT alter the URLs, request shapes, response payloads, or status codes of the existing REST API v1 endpoints served by `app.py`. The shared `queries/` refactor SHALL be transparent to REST consumers.
+The MCP server SHALL NOT alter the URLs, request shapes, response payloads, or status codes of the REST API v1 endpoints served by `app.py` (excluding the RTT/latency endpoints removed by the `remove-rtt-pipeline` change). The shared `queries/` package SHALL remain transparent to REST consumers.
 
 #### Scenario: REST contract preserved
-- **WHEN** a REST client requests `/api/v1/snapshot/`, `/api/v1/nodes/leaderboard/`, `/api/v1/nodes/{addr}-{port}/rtt/`, or any other existing v1 endpoint after the MCP change is deployed
-- **THEN** the response status code, headers, and JSON shape SHALL be identical to the pre-change behaviour
+- **WHEN** a REST client requests `/api/v1/snapshots/`, `/api/v1/nodes/{addr}-{port}/`, `/api/v1/rankings/countries/`, `/api/v1/groups/by-ip/`, or any other surviving v1 endpoint
+- **THEN** the response status code, headers, and JSON shape SHALL be identical to the pre-change behaviour (minus the removed `latency_ms` / `median_rtt_ms` fields)

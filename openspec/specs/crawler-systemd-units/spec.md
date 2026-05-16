@@ -2,30 +2,22 @@
 
 ## Purpose
 
-Defines the systemd contract for the bitnodes crawler stack deployment: how `bitnodes.service` relates to the optional pcap-capture service (`tcpdump-pcap.service`), and how `install.sh` keeps pcap capture inert across deploys. Driven by the 2026-05-13 postmortem where a `Wants=tcpdump-pcap.service` dependency revived the sniffer on every crawler restart, causing snapshot-count oscillation.
+Defines the systemd contract for the bitnodes crawler stack deployment. After the `remove-rtt-pipeline` change there is no pcap-capture pipeline at all — this capability now exists to make that absence load-bearing: the deployment ships no `tcpdump-pcap.service`/`pcap-cleanup.*`/`run-tcpdump.sh`, and `install.sh` contains no tcpdump or pcap logic.
 
 ## Requirements
 
-### Requirement: pcap capture is never a side effect of the crawler
+### Requirement: The deployment ships no pcap-capture component
 
-The crawler service (`bitnodes.service`) SHALL NOT start, want, require, or otherwise pull in the pcap-capture service (`tcpdump-pcap.service`) as a dependency. Starting pcap capture SHALL be an explicit, manual action.
+The deployment SHALL contain no packet-capture pipeline at all: no `tcpdump-pcap.service`, no `run-tcpdump.sh`, no `pcap-cleanup.service`/`pcap-cleanup.timer`. `install.sh` SHALL neither install nor sanitise any tcpdump/pcap unit — there is no such unit to enable, disable, want, or clean up.
 
-#### Scenario: Crawler restart does not start pcap capture
-- **WHEN** `bitnodes.service` is started or restarted (e.g. during a deploy)
-- **THEN** `tcpdump-pcap.service` SHALL NOT be activated as a consequence — its `ExecMainStartTimestamp` SHALL NOT coincide with the crawler's
+#### Scenario: No pcap units in the repository or on the host
+- **WHEN** `install.sh` runs on a host
+- **THEN** no `tcpdump-pcap.service`, `pcap-cleanup.service`, or `pcap-cleanup.timer` is installed, and `deploy/` contains none of `tcpdump-pcap.service`, `run-tcpdump.sh`, `pcap-cleanup.service`, `pcap-cleanup.timer`
 
-#### Scenario: pcap capture remains manually startable
-- **WHEN** an operator runs `systemctl start tcpdump-pcap.service` explicitly
-- **THEN** the pcap-capture service SHALL start normally, so it stays available as an opt-in tool
+#### Scenario: install.sh has no tcpdump/pcap logic
+- **WHEN** `install.sh` is inspected
+- **THEN** it SHALL contain no install, placeholder-substitution, `stop`, `disable`, or `pkill` logic referring to tcpdump or pcap
 
-### Requirement: Disabling pcap capture survives deploys
-
-The deployment (`install.sh`) SHALL leave `tcpdump-pcap.service` inert by default after every run — neither enabled for boot nor pulled in by another unit — so that the snapshot-stability decision from the 2026-05-13 postmortem holds across deploys.
-
-#### Scenario: After a deploy, pcap capture is inert
-- **WHEN** `install.sh` finishes on a host
-- **THEN** `tcpdump-pcap.service` SHALL be neither `active` (unless an operator started it manually) nor reachable as a dependency of `bitnodes.service`
-
-#### Scenario: A stray tcpdump from a prior state is cleaned up
-- **WHEN** `install.sh` runs and a `tcpdump` process or `tcpdump-pcap.service` instance is alive from a previous configuration
-- **THEN** `install.sh` SHALL stop and kill it as part of its idempotent sanitation, leaving the host in the inert state
+#### Scenario: A host upgraded across this change loses the pcap units
+- **WHEN** `install.sh` runs on a host that still had `tcpdump-pcap.service` from a previous deploy
+- **THEN** the deploy SHALL leave the host with no pcap-capture units installed (the units are removed, not merely disabled)

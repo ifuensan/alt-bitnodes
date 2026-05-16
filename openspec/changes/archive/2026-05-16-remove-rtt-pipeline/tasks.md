@@ -47,9 +47,9 @@
 
 ## 8. Despliegue y verificación en producción
 
-- [ ] 8.1 Commit + push (el workflow corre `install.sh` sin nada de pcap)
-- [ ] 8.2 Limpiar en el EC2 (una vez): `data/rtt.sqlite` y `~/bitnodes/data/pcap/`
-- [ ] 8.3 Verificar: `journalctl` sin `tcpdump-pcap`, sin proceso `tcpdump`, `systemctl status tcpdump-pcap` → not-found
-- [ ] 8.4 Verificar: el dashboard carga sin KPI de latencia ni sección "Fastest nodes"
-- [ ] 8.5 Verificar: `/api/v1/snapshots/latest/` y `/api/v1/rankings/*` responden 200 sin campos de RTT; `/api/v1/nodes/leaderboard/` y `/api/v1/nodes/{id}/rtt/` responden 404
-- [ ] 8.6 Verificar: snapshots estables ~4000+ sin oscilación durante ≥30 min
+- [x] 8.1 Commit + push (commit `bcf62f5`; precedido por archive de `fix-tcpdump-revival` en `70636c4`). Workflow Deploy to EC2 lanzado.
+- [x] 8.2 Limpiar en el EC2 (una vez): `data/rtt.sqlite` y `~/bitnodes/data/pcap/`
+- [x] 8.3 Verificar: `journalctl` sin `tcpdump-pcap`, sin proceso `tcpdump`, `systemctl status tcpdump-pcap` → not-found
+- [x] 8.4 Verificar: el dashboard carga sin KPI de latencia ni sección "Fastest nodes"
+- [x] 8.5 Verificar: `/api/v1/snapshots/latest/` y `/api/v1/rankings/*` responden 200 sin campos de RTT; `/api/v1/nodes/leaderboard/` y `/api/v1/nodes/{id}/rtt/` responden 404; MCP en prod ya no expone `get_leaderboard` ni `get_node_rtt` (servidor reconectado tras deploy sin esas tools)
+- [x] 8.6 Verificar: snapshots estables ~4000+ sin oscilación durante ≥30 min
