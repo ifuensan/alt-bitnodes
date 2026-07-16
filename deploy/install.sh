@@ -21,6 +21,10 @@ DASHBOARD_DIR="${INSTALL_HOME}/alt-bitnodes"
 PYENV_ROOT="${INSTALL_HOME}/.pyenv"
 PYTHON_VERSION="3.12.4"
 USER_AGENT="${BITNODES_USER_AGENT:-/alt-bitnodes:0.1/}"
+# Extra Tor instances (tor@bitnodes1..N on SocksPorts 9051..905N) besides the
+# distro default on 9050. Tor is single-threaded; the crawler spreads onion
+# dials across every proxy listed in tor_proxies.
+TOR_POOL_SIZE=5
 
 log() { printf '\n\033[1;36m==>\033[0m %s\n' "$*"; }
 
@@ -37,6 +41,22 @@ install_apt_packages() {
     redis-server sqlite3 tor nginx
   systemctl enable --now redis-server
   systemctl enable --now tor
+}
+
+setup_tor_pool() {
+  log "Provisioning Tor SOCKS pool (tor@bitnodes1..${TOR_POOL_SIZE})"
+  local i name port torrc
+  for i in $(seq 1 "${TOR_POOL_SIZE}"); do
+    name="bitnodes${i}"
+    port=$((9050 + i))
+    torrc="/etc/tor/instances/${name}/torrc"
+    [[ -d "/etc/tor/instances/${name}" ]] || tor-instance-create "${name}"
+    if [[ ! -f "${torrc}" ]] || ! grep -qx "SocksPort 127.0.0.1:${port}" "${torrc}"; then
+      printf 'SocksPort 127.0.0.1:%d\n' "${port}" > "${torrc}"
+      systemctl try-reload-or-restart "tor@${name}" 2>/dev/null || true
+    fi
+    systemctl enable --now "tor@${name}"
+  done
 }
 
 install_pyenv() {
@@ -102,20 +122,28 @@ setup_crawler() {
     fi
   done
 
+  # bitnodes parses config lists one item per line (utils.txt_items), so the
+  # pool goes in as indented continuation lines. Deleting any previous
+  # continuation lines first keeps re-runs from accumulating duplicates.
+  local i tor_proxies="127.0.0.1:9050"
+  for i in $(seq 1 "${TOR_POOL_SIZE}"); do
+    tor_proxies+="\\n    127.0.0.1:$((9050 + i))"
+  done
   for cfg in "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf"; do
     sudo -u "${INSTALL_USER}" sed -i "s|^user_agent = .*|user_agent = ${USER_AGENT}|" "${cfg}"
-    sudo -u "${INSTALL_USER}" sed -i "s|^tor_proxies =.*|tor_proxies = 127.0.0.1:9050|" "${cfg}"
+    sudo -u "${INSTALL_USER}" sed -i '/^tor_proxies =/,/^[^[:space:]]/{/^[[:space:]]/d}' "${cfg}"
+    sudo -u "${INSTALL_USER}" sed -i "s|^tor_proxies =.*|tor_proxies = ${tor_proxies}|" "${cfg}"
     sudo -u "${INSTALL_USER}" sed -i "s|^socket_timeout = .*|socket_timeout = 60|" "${cfg}"
   done
 
   # c7g.2xlarge: 8 vCPU, 16 GB RAM. Crawler is CPU-bound at handshake
   # parsing, so workers scale ~linearly with vCPU count (rule of thumb:
-  # ~150 crawl workers per vCPU). Upstream defaults (crawl=700,
-  # ping=2000, sampling=100%) still over-subscribe Tor; keep
-  # onion_peers_sampling_rate low and ping.workers modest.
+  # ~150 crawl workers per vCPU). Full onion sampling is served by the
+  # Tor pool (6 SocksPorts); a single Tor daemon at sampling 100 caused
+  # the 2026-05-12 saturation. ping.workers stays modest.
   sudo -u "${INSTALL_USER}" sed -i \
     -e "s|^workers = .*|workers = 1200|" \
-    -e "s|^onion_peers_sampling_rate = .*|onion_peers_sampling_rate = 25|" \
+    -e "s|^onion_peers_sampling_rate = .*|onion_peers_sampling_rate = 100|" \
     -e "s|^snapshot_delay = .*|snapshot_delay = 1800|" \
     "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf"
   sudo -u "${INSTALL_USER}" sed -i \
@@ -263,6 +291,7 @@ install_cloudwatch_agent() {
 main() {
   require_root
   install_apt_packages
+  setup_tor_pool
   install_pyenv
   setup_crawler
   setup_dashboard
