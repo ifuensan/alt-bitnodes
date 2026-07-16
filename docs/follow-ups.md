@@ -19,19 +19,13 @@ research thread.
 
 ### Unit tests for the `queries/` data layer
 
-**Status**: Deferred 2026-05-14 while archiving `expose-api-as-mcp`
-(task 1.3). The `queries/` package was extracted as a pure, FastAPI-free
-data layer precisely so it's testable, but the repo has no test infra
-yet (no `tests/`, no pytest config).
-
-**Idea**: Add `tests/` with minimal coverage of `queries/` — snapshot
-loading, rankings, `node_status`, `parse_node_id`. Either mock Redis
-or run against fixtures with real snapshot JSON. Pulls in pytest as
-the first test dependency.
-
-**Why it matters**: both `app.py` and `alt_bitnodes_mcp/` now depend on
-`queries/`; a regression there breaks the REST API and the MCP server at
-once. Worth a safety net before the next refactor touches it.
+**Status**: Done 2026-07-16. Added `tests/` (34 tests over
+`snapshots`, `nodes`, `leaderboard`, `util`), `pytest.ini`,
+`requirements-dev.txt`, and a CI test job gating the deploy in
+`.github/workflows/deploy.yml`. Redis is faked in `tests/conftest.py`;
+snapshot fixtures are written to a temp `BITNODES_EXPORT_DIR`.
+Remaining idea if ever needed: endpoint-level tests for `app.py` via
+`fastapi.testclient` and coverage of `alt_bitnodes_mcp/tools.py`.
 
 ## Crawler features
 
