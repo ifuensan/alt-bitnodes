@@ -116,7 +116,7 @@ setup_crawler() {
   sudo -u "${INSTALL_USER}" sed -i \
     -e "s|^workers = .*|workers = 1200|" \
     -e "s|^onion_peers_sampling_rate = .*|onion_peers_sampling_rate = 25|" \
-    -e "s|^snapshot_delay = .*|snapshot_delay = 900|" \
+    -e "s|^snapshot_delay = .*|snapshot_delay = 1800|" \
     "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf"
   sudo -u "${INSTALL_USER}" sed -i \
     -e "s|^workers = .*|workers = 600|" \
@@ -144,15 +144,19 @@ install_systemd_units() {
   install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes-mcp.service" /etc/systemd/system/alt-bitnodes-mcp.service
   install -m 0644 "${DASHBOARD_DIR}/deploy/geoip-update.service" /etc/systemd/system/geoip-update.service
   install -m 0644 "${DASHBOARD_DIR}/deploy/geoip-update.timer" /etc/systemd/system/geoip-update.timer
+  install -m 0644 "${DASHBOARD_DIR}/deploy/export-prune.service" /etc/systemd/system/export-prune.service
+  install -m 0644 "${DASHBOARD_DIR}/deploy/export-prune.timer" /etc/systemd/system/export-prune.timer
   install -m 0755 "${DASHBOARD_DIR}/deploy/run-bitnodes.sh" "${CRAWLER_DIR}/run-bitnodes.sh"
   chown "${INSTALL_USER}:${INSTALL_USER}" "${CRAWLER_DIR}/run-bitnodes.sh"
 
   sed -i "s|__USER__|${INSTALL_USER}|g; s|__CRAWLER_DIR__|${CRAWLER_DIR}|g; s|__DASHBOARD_DIR__|${DASHBOARD_DIR}|g; s|__EXPORT_DIR__|${CRAWLER_DIR}/data/export/f9beb4d9|g" \
     /etc/systemd/system/bitnodes.service /etc/systemd/system/alt-bitnodes.service \
-    /etc/systemd/system/alt-bitnodes-mcp.service /etc/systemd/system/geoip-update.service
+    /etc/systemd/system/alt-bitnodes-mcp.service /etc/systemd/system/geoip-update.service \
+    /etc/systemd/system/export-prune.service
 
   systemctl daemon-reload
   systemctl enable bitnodes.service alt-bitnodes.service alt-bitnodes-mcp.service
+  systemctl enable --now export-prune.timer
   # Restart so re-runs pick up unit-file changes (enable --now is a no-op on
   # already-running services; we explicitly want them to reload config).
   systemctl restart bitnodes.service alt-bitnodes.service alt-bitnodes-mcp.service

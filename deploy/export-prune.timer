@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily prune of old snapshot exports
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=3600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

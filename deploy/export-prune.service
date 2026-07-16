@@ -1,0 +1,14 @@
+[Unit]
+Description=Prune bitnodes snapshot exports older than 90 days
+
+[Service]
+Type=oneshot
+User=__USER__
+Group=__USER__
+ExecStart=/usr/bin/find __EXPORT_DIR__ -maxdepth 1 -name '*.json' -mtime +90 -delete
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=__EXPORT_DIR__
