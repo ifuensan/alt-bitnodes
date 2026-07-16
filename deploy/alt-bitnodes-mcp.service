@@ -9,8 +9,6 @@ User=__USER__
 Group=__USER__
 WorkingDirectory=__DASHBOARD_DIR__
 Environment=BITNODES_EXPORT_DIR=__EXPORT_DIR__
-Environment=RTT_DB_PATH=__DASHBOARD_DIR__/data/rtt.sqlite
-Environment=RTT_INGEST_ENABLED=false
 Environment=MCP_TOKEN_PATH=/etc/alt-bitnodes/mcp-token
 Environment=MCP_REQUIRE_AUTH=1
 ExecStart=__DASHBOARD_DIR__/venv/bin/python -m alt_bitnodes_mcp --http --host 127.0.0.1 --port 8001

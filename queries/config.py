@@ -8,7 +8,7 @@ from pathlib import Path
 EXPORT_DIR = Path(
     os.environ.get(
         "BITNODES_EXPORT_DIR",
-        "/mnt/datos/home_data/Work/myprojects/research/bitnodes/data/export/f9beb4d9",
+        "/mnt/datos/home_data/Work/hacknodes/myprojects/research/bitnodes/data/export/f9beb4d9",
     )
 )
 REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
