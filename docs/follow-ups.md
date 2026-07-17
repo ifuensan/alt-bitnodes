@@ -42,11 +42,17 @@ slots — not more Tor instances.
 
 ### IPv6 connectivity
 
-**Status**: Not started. Latest snapshots carry 0 IPv6 nodes despite
-`ipv6 = True` in the crawler conf — the EC2/VPC almost certainly has no
-IPv6 (no AAAA on the instance, or subnet/SG without it). Enabling IPv6
-in the VPC + instance + security group is AWS-side work (no repo
-change) worth ~1.5–2k extra reachable nodes.
+**Status**: Done 2026-07-17, AWS-side only (no repo change). VPC
+`vpc-028219a15ed6cde2e` got Amazon-provided `2600:1f18:4614:4600::/56`;
+subnet `subnet-013a3bf06e170e6a2` took the first /64; ENI
+`eni-03cec437a852efaad` assigned `...:680:fc28:1dcb:db6a`; route
+`::/0 -> igw-067cbb0e57ec7e4fb` added to `rtb-0195dc5dc21bc91f2`; SG
+egress already allowed `::/0`. On the host, `/etc/netplan/60-ipv6.yaml`
+enables `dhcp6: true` on ens5 (persistent). Egress verified with
+`curl -6`. The crawler already ran with `ipv6 = True`, so IPv6 nodes
+ramp up without a restart. Note: none of this is in CloudFormation
+(edge.yaml only covers CloudFront) — if the VPC is ever rebuilt, redo
+by hand or codify then.
 
 ### I2P SAM crawl integration
 
