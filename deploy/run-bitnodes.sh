@@ -19,7 +19,7 @@ for i in 1 2; do
 done
 
 $NICE python -u ping.py    conf/ping.f9beb4d9.conf    master >> log/ping.f9beb4d9.master.out 2>&1 &
-for i in $(seq 1 6); do
+for i in $(seq 1 11); do
   $NICE python -u ping.py  conf/ping.f9beb4d9.conf    slave  >> "log/ping.f9beb4d9.slave.${i}.out" 2>&1 &
 done
 

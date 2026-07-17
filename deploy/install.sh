@@ -140,14 +140,17 @@ setup_crawler() {
   # parsing, so workers scale ~linearly with vCPU count (rule of thumb:
   # ~150 crawl workers per vCPU). Full onion sampling is served by the
   # Tor pool (6 SocksPorts); a single Tor daemon at sampling 100 caused
-  # the 2026-05-12 saturation. ping.workers stays modest.
+  # the 2026-05-12 saturation. Snapshot size == simultaneously open
+  # sockets == ping processes x ping.workers, so ping capacity is the
+  # snapshot ceiling: 12 procs x 2000 = 24k slots (upstream default is
+  # 2000; the old 600 capped snapshots at 7 x 600 = 4.2k).
   sudo -u "${INSTALL_USER}" sed -i \
     -e "s|^workers = .*|workers = 1200|" \
     -e "s|^onion_peers_sampling_rate = .*|onion_peers_sampling_rate = 100|" \
     -e "s|^snapshot_delay = .*|snapshot_delay = 1800|" \
     "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf"
   sudo -u "${INSTALL_USER}" sed -i \
-    -e "s|^workers = .*|workers = 600|" \
+    -e "s|^workers = .*|workers = 2000|" \
     "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf"
 
   sudo -u "${INSTALL_USER}" mkdir -p "${CRAWLER_DIR}/log" "${CRAWLER_DIR}/data"
