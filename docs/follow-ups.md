@@ -29,6 +29,25 @@ Remaining idea if ever needed: endpoint-level tests for `app.py` via
 
 ## Crawler features
 
+### Onion ramp-up after the multi-Tor pool
+
+**Status**: `scale-onion-crawling-multi-tor` deployed 2026-07-16. Onion
+counts went 12 → 226 in the first ~2h and were still climbing, with no
+Tor saturation (18 circuit-pending mentions in 30 min vs ~1M/10 min in
+the 2026-05-12 incident). Re-check in a few days: if the onion count
+plateaus in the hundreds instead of thousands, the next lever is the
+ping stack (`ping.workers` 600, 6 slaves) — snapshots count
+*simultaneously open* sockets, and slow Tor sockets compete for those
+slots — not more Tor instances.
+
+### IPv6 connectivity
+
+**Status**: Not started. Latest snapshots carry 0 IPv6 nodes despite
+`ipv6 = True` in the crawler conf — the EC2/VPC almost certainly has no
+IPv6 (no AAAA on the instance, or subnet/SG without it). Enabling IPv6
+in the VPC + instance + security group is AWS-side work (no repo
+change) worth ~1.5–2k extra reachable nodes.
+
 ### I2P SAM crawl integration
 
 **Status**: Research complete

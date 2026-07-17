@@ -18,18 +18,18 @@
 
 ## 2. Deploy and verify
 
-- [ ] 2.1 Commit and push; confirm CI (test + deploy jobs) green.
-- [ ] 2.2 Health check ~15 min after deploy: `tor@bitnodes1..5` active,
+- [x] 2.1 Commit and push; confirm CI (test + deploy jobs) green.
+- [x] 2.2 Health check ~15 min after deploy: `tor@bitnodes1..5` active,
       SocksPorts 9051–9055 listening, load average sane, no circuit-drop
       floods in `journalctl -u 'tor@*'`.
-- [ ] 2.3 Verify onion recovery ~2 h after deploy: onion count in the latest
+- [x] 2.3 Verify onion recovery ~2 h after deploy: onion count in the latest
       snapshot via `/api/v1/snapshots/latest/` clearly above the old ~12 and
       trending up; note load/Tor CPU for the record.
-- [ ] 2.4 If saturation signs appear, execute the rollback (revert commit,
+- [x] 2.4 If saturation signs appear, execute the rollback (revert commit,
       CI redeploy) and document findings.
 
 ## 3. Bookkeeping
 
-- [ ] 3.1 Update `docs/follow-ups.md`: mark the onion gap addressed; add
+- [x] 3.1 Update `docs/follow-ups.md`: mark the onion gap addressed; add
       follow-up candidates (ping worker retune, IPv6 enablement in VPC).
-- [ ] 3.2 Archive the change and sync `openspec/specs/onion-crawling/`.
+- [x] 3.2 Archive the change and sync `openspec/specs/onion-crawling/`.
