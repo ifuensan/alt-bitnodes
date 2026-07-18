@@ -223,6 +223,9 @@ setup_crawler() {
   ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" i2p True
   ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" i2p_proxies 127.0.0.1:7656
   ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" i2p_peers_sampling_rate 100
+  # Seed the I2P ring: clearnet peers rarely gossip .b32.i2p, so without
+  # seeds it never bootstraps. The list ships with the crawler fork.
+  ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" i2p_nodes_file conf/i2p_seeds.txt
   ensure_conf_key "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf" i2p True
   ensure_conf_key "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf" i2p_proxies 127.0.0.1:7656
 
