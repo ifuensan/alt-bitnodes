@@ -91,12 +91,14 @@ ensure_conf_key() {
 
 setup_tor_pool() {
   log "Provisioning Tor SOCKS pool (tor@bitnodes1..${TOR_POOL_SIZE})"
-  # Thousands of concurrent rendezvous circuits (one per kept-alive .onion
-  # peer, they cannot be shared) blow straight through Tor's default
-  # 32-pending-builds cap: every daemon logged millions of suppressed
-  # "circuits pending" waits and onion counts decayed over hours
-  # (2026-07-18). Raise the build parallelism and spread guard load.
-  local tor_opts="MaxClientCircuitsPending 1024
+  # Rendezvous circuits are per-.onion and unshareable, so onion coverage
+  # needs far more parallel builds than Tor's default 32-pending cap (which
+  # throttled us to ~12 onions). But 1024 over-corrected: the pool's crypto
+  # saturated all 8 vCPUs (load ~7.3, Tor ~475% CPU) and onion decayed as
+  # circuit upkeep lost the CPU race. RAM was never the constraint (~24%).
+  # 256 is the middle ground: enough parallelism to sustain thousands of
+  # onions without pinning the box. Revisit (or resize) from real numbers.
+  local tor_opts="MaxClientCircuitsPending 256
 NumEntryGuards 8"
   local i name port torrc desired
   for i in $(seq 1 "${TOR_POOL_SIZE}"); do
