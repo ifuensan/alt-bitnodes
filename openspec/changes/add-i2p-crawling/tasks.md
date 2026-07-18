@@ -14,7 +14,7 @@
 
 ## 2. Deploy and verify
 
-- [ ] 2.1 Commit, push, CI green.
+- [x] 2.1 Commit, push, CI green.
 - [ ] 2.2 Verify on host: i2pd active, 7656 listening, crawler on the new
       branch, no errors in crawl/ping logs.
 - [ ] 2.3 Within a few hours: first `.b32.i2p` nodes in snapshots.

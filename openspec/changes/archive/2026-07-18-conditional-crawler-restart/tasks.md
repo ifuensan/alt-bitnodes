@@ -12,12 +12,12 @@
 
 ## 2. Deploy and verify
 
-- [ ] 2.1 Push; this deploy still restarts the crawler (the commit itself
+- [x] 2.1 Push; this deploy still restarts the crawler (the commit itself
       does not change crawler inputs, but the previous Tor tuning did — the
       real test is the next dashboard-only deploy).
-- [ ] 2.2 On a later crawler-neutral deploy, confirm via logs/uptime that
+- [x] 2.2 On a later crawler-neutral deploy, confirm via logs/uptime that
       `bitnodes.service` was left running.
 
 ## 3. Bookkeeping
 
-- [ ] 3.1 Archive change, sync spec.
+- [x] 3.1 Archive change, sync spec.
