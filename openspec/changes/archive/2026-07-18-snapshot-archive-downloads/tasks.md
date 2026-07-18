@@ -29,12 +29,12 @@
       03:30 UTC + jitter, dashboard venv/user, placeholder substitution);
       wire into `install.sh` (install, sed, enable — crawler fingerprint
       untouched).
-- [ ] 3.2 Commit, push, CI green; verify deploy log shows "Crawler
+- [x] 3.2 Commit, push, CI green; verify deploy log shows "Crawler
       unchanged".
-- [ ] 3.3 Verify on production: first archiver run backfills, listing
+- [x] 3.3 Verify on production: first archiver run backfills, listing
       non-empty, CSV and Parquet download correctly, screen renders.
 
 ## 4. Bookkeeping
 
-- [ ] 4.1 Update docs/follow-ups.md if anything was deferred; archive the
+- [x] 4.1 Update docs/follow-ups.md if anything was deferred; archive the
       change and sync both specs.
