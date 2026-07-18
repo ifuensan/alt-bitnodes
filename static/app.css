@@ -160,7 +160,22 @@ header h1 {
 }
 .panel-full { grid-column: 1 / -1; }
 .map-panel { display: flex; flex-direction: column; }
+.panel-head { display: flex; align-items: baseline; justify-content: space-between; }
+#map-reset {
+  background: var(--surface-2); color: var(--text-dim);
+  border: 1px solid var(--border);
+  font-family: var(--font); font-size: 10px; letter-spacing: 0.6px;
+  padding: var(--xs) var(--sm); border-radius: 0;
+  cursor: pointer;
+}
+#map-reset:hover { color: var(--text); }
+/* Height is driven from the panel width by app.js (sizeMapContainer) so the
+   projection fills the frame; flex:1 remains as the pre-JS fallback. */
 #globe { flex: 1; width: 100%; min-height: 280px; border-radius: 0; }
+
+@media (max-width: 720px) {
+  .grid { grid-template-columns: 1fr; }
+}
 
 /* --- Tables --------------------------------------------------------------- */
 .table-panel { margin: var(--lg) var(--xl); }

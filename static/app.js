@@ -3,6 +3,46 @@ let currentNodes = [];
 let currentStats = null;
 let globeInitialized = false;
 
+// Below this width the orthographic globe is unusable with touch gestures;
+// render a flat map instead (see dashboard-map spec).
+const mobileMapQuery = window.matchMedia("(max-width: 720px)");
+const GLOBE_DEFAULT_ROTATION = { lon: -30, lat: 25 };
+const GLOBE_MAX_HEIGHT = 560;
+
+function isFlatMap() {
+  return mobileMapQuery.matches;
+}
+
+// Drive #globe's height from the panel width so the projection fills the
+// frame: Plotly locks geo subplots to their aspect, so a wide flex-sized div
+// would otherwise center a small square with dead gutters.
+function sizeMapContainer() {
+  const el = document.getElementById("globe");
+  if (!el) return;
+  const width = el.clientWidth;
+  if (!width) return;
+  const target = isFlatMap()
+    ? Math.max(240, Math.round(width * 0.55))
+    : Math.min(Math.max(280, width), GLOBE_MAX_HEIGHT);
+  if (Math.abs(el.clientHeight - target) > 1) {
+    el.style.flex = "none";
+    el.style.height = target + "px";
+    if (globeInitialized) Plotly.Plots.resize(el);
+  }
+}
+
+function resetMapView() {
+  if (!globeInitialized) return;
+  const flat = isFlatMap();
+  Plotly.relayout("globe", {
+    "geo.projection.rotation.lon": flat ? 0 : GLOBE_DEFAULT_ROTATION.lon,
+    "geo.projection.rotation.lat": flat ? 0 : GLOBE_DEFAULT_ROTATION.lat,
+    "geo.projection.scale": 1,
+    "geo.center.lon": 0,
+    "geo.center.lat": 0,
+  });
+}
+
 // Read the active theme's design tokens. Charts (Observable Plot, Plotly)
 // take colors as JS strings, so they can't use var(--token) directly —
 // resolve them at render time from CSS custom properties.
@@ -85,9 +125,13 @@ function updateGlobe(stats) {
     marker: { line: { color: g.countryLine, width: 0.4 } },
     hovertemplate: "<b>%{location}</b><br>%{z} nodes<extra></extra>",
   }];
+  sizeMapContainer();
   const layout = {
     geo: {
-      projection: { type: "orthographic", rotation: { lon: -30, lat: 25 } },
+      domain: { x: [0, 1], y: [0, 1] },
+      projection: isFlatMap()
+        ? { type: "natural earth" }
+        : { type: "orthographic", rotation: { ...GLOBE_DEFAULT_ROTATION } },
       showocean: true, oceancolor: g.ocean,
       showland: true,  landcolor: g.land,
       showcountries: true, countrycolor: g.countryLine,
@@ -100,7 +144,7 @@ function updateGlobe(stats) {
     margin: { l: 0, r: 0, t: 0, b: 0 },
     font: { color: tok.text, family: MONO_FONT_STACK },
   };
-  const config = { displayModeBar: false, responsive: true };
+  const config = { displayModeBar: false, responsive: true, scrollZoom: true };
   if (globeInitialized) {
     Plotly.react("globe", data, layout, config);
   } else {
@@ -284,6 +328,16 @@ async function init() {
   document.getElementById("filter").addEventListener("input", applyFilter);
   setThemeToggleLabel();
   document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+  document.getElementById("map-reset").addEventListener("click", resetMapView);
+
+  // Projection follows the viewport class; re-render from the cached stats,
+  // never refetch. The guarded height write keeps the observer loop-free.
+  mobileMapQuery.addEventListener("change", () => {
+    if (currentStats) updateGlobe(currentStats);
+  });
+  new ResizeObserver(() => {
+    sizeMapContainer();
+  }).observe(document.querySelector(".map-panel"));
 
   if (timestamps.length) {
     select.value = timestamps[timestamps.length - 1];
