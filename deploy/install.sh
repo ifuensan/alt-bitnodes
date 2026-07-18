@@ -65,6 +65,19 @@ setup_i2pd() {
   echo "WARNING: i2pd SAM bridge not listening on 7656; I2P dials will fail" >&2
 }
 
+# Everything that, if changed, requires a bitnodes.service restart. Restarts
+# kill ~12k live connections and cost hours of snapshot ramp-up, so deploys
+# that don't touch the crawler must leave it running (see
+# crawler-systemd-units spec).
+crawler_fingerprint() {
+  {
+    git -C "${CRAWLER_DIR}" rev-parse HEAD 2>/dev/null
+    cat "${CRAWLER_DIR}"/conf/*.f9beb4d9.conf 2>/dev/null
+    cat "${CRAWLER_DIR}/run-bitnodes.sh" 2>/dev/null
+    cat /etc/systemd/system/bitnodes.service 2>/dev/null
+  } | sha256sum | cut -d' ' -f1
+}
+
 # Set key to value in a single-section crawler conf, appending if the key
 # does not exist yet (live conf files may predate newer keys).
 ensure_conf_key() {
@@ -246,9 +259,17 @@ install_systemd_units() {
   systemctl daemon-reload
   systemctl enable bitnodes.service alt-bitnodes.service alt-bitnodes-mcp.service
   systemctl enable --now export-prune.timer
-  # Restart so re-runs pick up unit-file changes (enable --now is a no-op on
-  # already-running services; we explicitly want them to reload config).
-  systemctl restart bitnodes.service alt-bitnodes.service alt-bitnodes-mcp.service
+  # Dashboard + MCP are stateless: restart on every deploy so re-runs pick up
+  # unit-file changes. The crawler is stateful (open sockets, onion circuits):
+  # restart only if its inputs changed or it isn't running.
+  systemctl restart alt-bitnodes.service alt-bitnodes-mcp.service
+  if [[ "$(crawler_fingerprint)" != "${CRAWLER_STATE_BEFORE}" ]] \
+      || ! systemctl is-active --quiet bitnodes.service; then
+    log "Crawler changed or not running; restarting bitnodes.service"
+    systemctl restart bitnodes.service
+  else
+    log "Crawler unchanged; leaving bitnodes.service untouched"
+  fi
 
   # GeoIP timer only when license key is present. Idempotent: re-running
   # install.sh after the operator drops the key picks it up.
@@ -351,6 +372,7 @@ install_cloudwatch_agent() {
 
 main() {
   require_root
+  CRAWLER_STATE_BEFORE="$(crawler_fingerprint)"
   install_apt_packages
   setup_tor_pool
   setup_i2pd
