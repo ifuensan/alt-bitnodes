@@ -11,7 +11,7 @@
 set -euo pipefail
 
 CRAWLER_REPO="https://github.com/ifuensan/bitnodes.git"
-CRAWLER_BRANCH="fix/empty-include-asns"
+CRAWLER_BRANCH="feat/i2p-sam-crawl"
 DASHBOARD_REPO="https://github.com/ifuensan/alt-bitnodes.git"
 
 INSTALL_USER="${SUDO_USER:-${USER}}"
@@ -41,6 +41,39 @@ install_apt_packages() {
     redis-server sqlite3 tor nginx
   systemctl enable --now redis-server
   systemctl enable --now tor
+}
+
+setup_i2pd() {
+  log "Installing i2pd (I2P router with SAM bridge)"
+  if ! command -v i2pd >/dev/null; then
+    add-apt-repository -y ppa:purplei2p/i2pd >/dev/null
+    apt-get update -qq
+    apt-get install -y -qq i2pd
+  fi
+  systemctl enable --now i2pd
+  # SAM is enabled by default on 127.0.0.1:7656 in current i2pd. Verify with
+  # a bounded wait; warn-only because I2P is a best-effort ring and a broken
+  # SAM must not block clearnet/Tor deploys.
+  local i
+  for i in $(seq 1 15); do
+    if ss -ltn "sport = :7656" | grep -q 7656; then
+      log "i2pd SAM bridge listening on 7656"
+      return
+    fi
+    sleep 2
+  done
+  echo "WARNING: i2pd SAM bridge not listening on 7656; I2P dials will fail" >&2
+}
+
+# Set key to value in a single-section crawler conf, appending if the key
+# does not exist yet (live conf files may predate newer keys).
+ensure_conf_key() {
+  local file="$1" key="$2" value="$3"
+  if grep -q "^${key} *=" "${file}"; then
+    sudo -u "${INSTALL_USER}" sed -i "s|^${key} *=.*|${key} = ${value}|" "${file}"
+  else
+    printf '\n%s = %s\n' "${key}" "${value}" | sudo -u "${INSTALL_USER}" tee -a "${file}" >/dev/null
+  fi
 }
 
 setup_tor_pool() {
@@ -152,6 +185,14 @@ setup_crawler() {
   sudo -u "${INSTALL_USER}" sed -i \
     -e "s|^workers = .*|workers = 2000|" \
     "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf"
+
+  # I2P ring: dial .b32.i2p peers through the local i2pd SAM bridge.
+  # ensure_conf_key because live conf files may predate these keys.
+  ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" i2p True
+  ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" i2p_proxies 127.0.0.1:7656
+  ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" i2p_peers_sampling_rate 100
+  ensure_conf_key "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf" i2p True
+  ensure_conf_key "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf" i2p_proxies 127.0.0.1:7656
 
   sudo -u "${INSTALL_USER}" mkdir -p "${CRAWLER_DIR}/log" "${CRAWLER_DIR}/data"
 }
@@ -295,6 +336,7 @@ main() {
   require_root
   install_apt_packages
   setup_tor_pool
+  setup_i2pd
   install_pyenv
   setup_crawler
   setup_dashboard
