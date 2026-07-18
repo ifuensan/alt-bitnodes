@@ -32,15 +32,12 @@ function sizeMapContainer() {
 }
 
 function resetMapView() {
-  if (!globeInitialized) return;
-  const flat = isFlatMap();
-  Plotly.relayout("globe", {
-    "geo.projection.rotation.lon": flat ? 0 : GLOBE_DEFAULT_ROTATION.lon,
-    "geo.projection.rotation.lat": flat ? 0 : GLOBE_DEFAULT_ROTATION.lat,
-    "geo.projection.scale": 1,
-    "geo.center.lon": 0,
-    "geo.center.lat": 0,
-  });
+  // Purge + fresh render: relayout-based resets misbehave on orthographic
+  // projections (geo.center displaces the sphere instead of centering it).
+  if (!currentStats) return;
+  Plotly.purge("globe");
+  globeInitialized = false;
+  updateGlobe(currentStats);
 }
 
 // Read the active theme's design tokens. Charts (Observable Plot, Plotly)
