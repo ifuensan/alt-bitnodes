@@ -248,17 +248,20 @@ install_systemd_units() {
   install -m 0644 "${DASHBOARD_DIR}/deploy/geoip-update.timer" /etc/systemd/system/geoip-update.timer
   install -m 0644 "${DASHBOARD_DIR}/deploy/export-prune.service" /etc/systemd/system/export-prune.service
   install -m 0644 "${DASHBOARD_DIR}/deploy/export-prune.timer" /etc/systemd/system/export-prune.timer
+  install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes-archive.service" /etc/systemd/system/alt-bitnodes-archive.service
+  install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes-archive.timer" /etc/systemd/system/alt-bitnodes-archive.timer
   install -m 0755 "${DASHBOARD_DIR}/deploy/run-bitnodes.sh" "${CRAWLER_DIR}/run-bitnodes.sh"
   chown "${INSTALL_USER}:${INSTALL_USER}" "${CRAWLER_DIR}/run-bitnodes.sh"
 
   sed -i "s|__USER__|${INSTALL_USER}|g; s|__CRAWLER_DIR__|${CRAWLER_DIR}|g; s|__DASHBOARD_DIR__|${DASHBOARD_DIR}|g; s|__EXPORT_DIR__|${CRAWLER_DIR}/data/export/f9beb4d9|g" \
     /etc/systemd/system/bitnodes.service /etc/systemd/system/alt-bitnodes.service \
     /etc/systemd/system/alt-bitnodes-mcp.service /etc/systemd/system/geoip-update.service \
-    /etc/systemd/system/export-prune.service
+    /etc/systemd/system/export-prune.service /etc/systemd/system/alt-bitnodes-archive.service
 
   systemctl daemon-reload
   systemctl enable bitnodes.service alt-bitnodes.service alt-bitnodes-mcp.service
   systemctl enable --now export-prune.timer
+  systemctl enable --now alt-bitnodes-archive.timer
   # Dashboard + MCP are stateless: restart on every deploy so re-runs pick up
   # unit-file changes. The crawler is stateful (open sockets, onion circuits):
   # restart only if its inputs changed or it isn't running.

@@ -9,7 +9,9 @@ from queries import (
     EXPORT_DIR,
     NoSnapshotsError,
     SnapshotMissingError,
+    find_archive_file,
     group_by_ip_detail,
+    list_archives,
     groups_by_ip,
     known_addresses_set,
     list_snapshots,
@@ -55,6 +57,11 @@ def paginate(items: list, page: int, limit: int, base_path: str) -> dict:
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse("templates/index.html")
+
+
+@app.get("/archive")
+def archive_page() -> FileResponse:
+    return FileResponse("templates/archive.html")
 
 
 @app.get("/api/snapshots")
@@ -236,6 +243,31 @@ def v1_groups_by_ip() -> dict:
     except SnapshotMissingError:
         raise _missing_snapshot_404()
     return {"count": len(results), "results": results}
+
+
+ARCHIVE_MEDIA_TYPES = {"csv": "text/csv", "parquet": "application/vnd.apache.parquet"}
+
+
+@app.get("/api/v1/archives/", tags=["v1"], summary="List archived snapshot photos")
+def v1_archives() -> dict:
+    results = list_archives()
+    return {"count": len(results), "results": results}
+
+
+@app.get("/api/v1/archives/{timestamp}.{fmt}", tags=["v1"],
+         summary="Download an archived photo (csv or parquet)",
+         responses={404: {"description": "archive not found"}})
+def v1_archive_download(timestamp: int, fmt: str) -> FileResponse:
+    path = find_archive_file(timestamp, fmt)
+    if path is None:
+        raise HTTPException(status_code=404, detail="archive not found")
+    return FileResponse(
+        path,
+        media_type=ARCHIVE_MEDIA_TYPES[fmt],
+        filename=path.name,
+        # Archived photos are immutable; let CloudFront and browsers keep them.
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
 
 
 @app.get("/api/v1/groups/by-ip/{address}/", tags=["v1"], summary="Nodes sharing one IP",

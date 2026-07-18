@@ -3,3 +3,4 @@ uvicorn[standard]==0.32.0
 redis==5.2.0
 pycountry==24.6.1
 mcp==1.27.1
+pyarrow==25.0.0

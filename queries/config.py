@@ -12,6 +12,7 @@ EXPORT_DIR = Path(
     )
 )
 REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
+ARCHIVE_DIR = Path(os.environ.get("BITNODES_ARCHIVE_DIR", "data/archive"))
 OPENDATA_TTL_SECONDS = 10
 
 FIELDS = [

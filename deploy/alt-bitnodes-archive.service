@@ -1,0 +1,20 @@
+[Unit]
+Description=alt-bitnodes snapshot archiver (tiered Parquet/CSV photos)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+Group=__USER__
+WorkingDirectory=__DASHBOARD_DIR__
+Environment=BITNODES_EXPORT_DIR=__EXPORT_DIR__
+ExecStart=__DASHBOARD_DIR__/venv/bin/python archiver.py
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=__DASHBOARD_DIR__/data
+
+[Install]
+WantedBy=multi-user.target

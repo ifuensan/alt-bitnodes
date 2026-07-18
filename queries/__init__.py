@@ -33,9 +33,15 @@ from queries.leaderboard import (
     groups_by_ip,
     group_by_ip_detail,
 )
+from queries.archives import (
+    find_archive_file,
+    list_archives,
+)
 from queries.util import iso2_to_iso3
 
 __all__ = [
+    "find_archive_file",
+    "list_archives",
     "EXPORT_DIR",
     "REDIS_URL",
     "OPENDATA_TTL_SECONDS",

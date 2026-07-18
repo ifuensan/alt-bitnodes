@@ -12,6 +12,8 @@ from pathlib import Path
 
 _EXPORT_DIR = Path(tempfile.mkdtemp(prefix="alt-bitnodes-test-export-"))
 os.environ["BITNODES_EXPORT_DIR"] = str(_EXPORT_DIR)
+_ARCHIVE_DIR = Path(tempfile.mkdtemp(prefix="alt-bitnodes-test-archive-"))
+os.environ["BITNODES_ARCHIVE_DIR"] = str(_ARCHIVE_DIR)
 
 import pytest
 
@@ -47,6 +49,11 @@ def export_dir() -> Path:
 
 
 @pytest.fixture()
+def archive_dir() -> Path:
+    return _ARCHIVE_DIR
+
+
+@pytest.fixture()
 def write_snapshot(export_dir):
     def _write(timestamp: int, rows: list) -> int:
         (export_dir / f"{timestamp}.json").write_text(json.dumps(rows))
@@ -60,6 +67,8 @@ def _clean_state(export_dir):
     """Reset snapshot files and every module-level cache between tests."""
     for p in export_dir.iterdir():
         p.unlink()
+    for p in sorted(_ARCHIVE_DIR.rglob("*"), reverse=True):
+        p.unlink() if p.is_file() else p.rmdir()
     snapshots.load_snapshot.cache_clear()
     snapshots.snapshot_meta.cache_clear()
     snapshots._addresses_state["last_ts"] = 0
