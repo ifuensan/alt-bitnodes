@@ -161,6 +161,10 @@ header h1 {
 .panel-full { grid-column: 1 / -1; }
 .map-panel { display: flex; flex-direction: column; }
 .panel-head { display: flex; align-items: baseline; justify-content: space-between; }
+.panel-note {
+  font-size: 10px; letter-spacing: 0.4px;
+  color: var(--muted);
+}
 #map-reset {
   background: var(--surface-2); color: var(--text-dim);
   border: 1px solid var(--border);

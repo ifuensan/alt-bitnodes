@@ -57,13 +57,20 @@ def known_addresses_set() -> set:
     return _addresses_state["set"]
 
 
+# Overlay nodes carry pseudo-ASNs (resolve.py tags them TOR / I2P); ASN
+# stats are clearnet-only so those buckets don't dwarf the real ranking.
+PSEUDO_ASNS = {"TOR", "I2P"}
+
+
 def snapshot_stats(timestamp: int) -> dict:
     """Compute distribution stats over one snapshot."""
     rows = load_snapshot(timestamp)
 
     countries = Counter(r[9] for r in rows if r[9])
     user_agents = Counter(r[3] for r in rows if r[3])
-    asns = Counter(f"{r[13]} {r[14]}" for r in rows if r[13])
+    asns = Counter(
+        f"{r[13]} {r[14]}" for r in rows if r[13] and r[13] not in PSEUDO_ASNS
+    )
     heights = [r[6] for r in rows if isinstance(r[6], int) and r[6] > 0]
     heights_sorted = sorted(heights)
     median_height = heights_sorted[len(heights_sorted) // 2] if heights_sorted else None

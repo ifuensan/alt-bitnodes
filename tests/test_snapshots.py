@@ -89,13 +89,19 @@ def test_snapshot_stats(write_snapshot):
                  asn="AS1", asn_name="One", height=300),
         make_row(port=8336, country=None, user_agent=None, asn=None,
                  asn_name=None, height=None),
+        make_row(address="abc.onion", port=8337, country=None, asn="TOR",
+                 asn_name="Tor network", height=None),
+        make_row(address="abc.b32.i2p", port=8338, country=None, asn="I2P",
+                 asn_name="I2P network", height=None),
     ]
     write_snapshot(100, rows)
     stats = snapshot_stats(100)
 
-    assert stats["total"] == 4
+    assert stats["total"] == 6
     assert stats["countries_total"] == 2
+    # Pseudo-ASNs (TOR / I2P) are excluded: ASN stats are clearnet-only.
     assert stats["asns_total"] == 2
+    assert not any("TOR" in label or "I2P" in label for label, _ in stats["top_asns"])
     assert stats["user_agents_total"] == 2
     assert stats["median_height"] == 200
     assert stats["top_countries"][0] == ("US", 2)
