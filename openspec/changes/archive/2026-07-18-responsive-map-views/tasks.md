@@ -20,10 +20,10 @@
 - [x] 2.1 Local verification: wide window (no gutters, zoom uses full
       frame), narrow window (flat map, switch back and forth), reset in
       both.
-- [ ] 2.2 Commit, push, CI green, "Crawler unchanged" in deploy log.
-- [ ] 2.3 Verify on production desktop + a phone; confirm hover/palette
+- [x] 2.2 Commit, push, CI green, "Crawler unchanged" in deploy log.
+- [x] 2.3 Verify on production desktop + a phone; confirm hover/palette
       intact in both themes.
 
 ## 3. Bookkeeping
 
-- [ ] 3.1 Archive change, sync `dashboard-map` spec.
+- [x] 3.1 Archive change, sync `dashboard-map` spec.
