@@ -78,18 +78,35 @@ ensure_conf_key() {
 
 setup_tor_pool() {
   log "Provisioning Tor SOCKS pool (tor@bitnodes1..${TOR_POOL_SIZE})"
-  local i name port torrc
+  # Thousands of concurrent rendezvous circuits (one per kept-alive .onion
+  # peer, they cannot be shared) blow straight through Tor's default
+  # 32-pending-builds cap: every daemon logged millions of suppressed
+  # "circuits pending" waits and onion counts decayed over hours
+  # (2026-07-18). Raise the build parallelism and spread guard load.
+  local tor_opts="MaxClientCircuitsPending 1024
+NumEntryGuards 8"
+  local i name port torrc desired
   for i in $(seq 1 "${TOR_POOL_SIZE}"); do
     name="bitnodes${i}"
     port=$((9050 + i))
     torrc="/etc/tor/instances/${name}/torrc"
     [[ -d "/etc/tor/instances/${name}" ]] || tor-instance-create "${name}"
-    if [[ ! -f "${torrc}" ]] || ! grep -qx "SocksPort 127.0.0.1:${port}" "${torrc}"; then
-      printf 'SocksPort 127.0.0.1:%d\n' "${port}" > "${torrc}"
-      systemctl try-reload-or-restart "tor@${name}" 2>/dev/null || true
+    desired="SocksPort 127.0.0.1:${port}
+${tor_opts}"
+    if [[ ! -f "${torrc}" ]] || [[ "$(cat "${torrc}")" != "${desired}" ]]; then
+      printf '%s\n' "${desired}" > "${torrc}"
+      # Full restart, not reload: also clears degraded guard/circuit state.
+      systemctl try-restart "tor@${name}" 2>/dev/null || true
     fi
     systemctl enable --now "tor@${name}"
   done
+
+  # Same treatment for the default instance (SocksPort 9050): it shares the
+  # crawler workload via tor_proxies.
+  if ! grep -q "^# alt-bitnodes crawler tuning" /etc/tor/torrc; then
+    printf '\n# alt-bitnodes crawler tuning\n%s\n' "${tor_opts}" >> /etc/tor/torrc
+    systemctl try-restart tor@default 2>/dev/null || true
+  fi
 }
 
 install_pyenv() {
