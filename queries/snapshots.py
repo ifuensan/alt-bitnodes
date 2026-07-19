@@ -81,9 +81,16 @@ def snapshot_stats(timestamp: int) -> dict:
         if iso3:
             countries_iso3.append([iso3, count])
 
+    tor = sum(1 for r in rows if r[0].endswith(".onion"))
+    i2p = sum(1 for r in rows if r[0].endswith(".b32.i2p"))
+    clearnet = len(rows) - tor - i2p
+
     return {
         "timestamp": timestamp,
         "total": len(rows),
+        "clearnet": clearnet,
+        "tor": tor,
+        "i2p": i2p,
         "countries_total": len(countries),
         "asns_total": len(asns),
         "user_agents_total": len(user_agents),

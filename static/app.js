@@ -261,6 +261,9 @@ async function loadSnapshot(ts) {
   currentNodes = snap.nodes;
   currentStats = stats;
   document.getElementById("kpi-total").textContent = fmt.format(stats.total);
+  document.getElementById("kpi-clearnet").textContent = fmt.format(stats.clearnet ?? 0);
+  document.getElementById("kpi-tor").textContent = fmt.format(stats.tor ?? 0);
+  document.getElementById("kpi-i2p").textContent = fmt.format(stats.i2p ?? 0);
   document.getElementById("kpi-countries").textContent = fmt.format(stats.countries_total);
   document.getElementById("kpi-asns").textContent = fmt.format(stats.asns_total);
   document.getElementById("kpi-height").textContent = stats.median_height ?? "—";

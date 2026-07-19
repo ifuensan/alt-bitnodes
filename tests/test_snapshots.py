@@ -98,6 +98,11 @@ def test_snapshot_stats(write_snapshot):
     stats = snapshot_stats(100)
 
     assert stats["total"] == 6
+    # Network breakdown of the total (clearnet + tor + i2p == total).
+    assert stats["tor"] == 1
+    assert stats["i2p"] == 1
+    assert stats["clearnet"] == 4
+    assert stats["clearnet"] + stats["tor"] + stats["i2p"] == stats["total"]
     assert stats["countries_total"] == 2
     # Pseudo-ASNs (TOR / I2P) are excluded: ASN stats are clearnet-only.
     assert stats["asns_total"] == 2

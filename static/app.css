@@ -121,10 +121,13 @@ header h1 {
 
 /* --- Stat tiles (KPIs) — one continuous strip, not floating cards --------- */
 .kpis {
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(7, 1fr);
   margin: var(--lg) var(--xl);
   background: var(--surface);
   border: 1px solid var(--border);
+}
+@media (max-width: 720px) {
+  .kpis { grid-template-columns: repeat(2, 1fr); }
 }
 .kpi {
   padding: var(--md);
