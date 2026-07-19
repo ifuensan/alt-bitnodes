@@ -129,6 +129,10 @@ header h1 {
 @media (max-width: 720px) {
   .kpis { grid-template-columns: repeat(2, 1fr); }
 }
+.window-note {
+  margin: calc(-1 * var(--md)) var(--xl) var(--lg);
+  font-size: 11px; color: var(--muted); letter-spacing: 0.3px;
+}
 .kpi {
   padding: var(--md);
   display: flex; flex-direction: column; gap: var(--xs);

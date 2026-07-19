@@ -37,11 +37,13 @@ from queries.archives import (
     find_archive_file,
     list_archives,
 )
+from queries.window_stats import load_window_stats
 from queries.util import iso2_to_iso3
 
 __all__ = [
     "find_archive_file",
     "list_archives",
+    "load_window_stats",
     "EXPORT_DIR",
     "REDIS_URL",
     "OPENDATA_TTL_SECONDS",

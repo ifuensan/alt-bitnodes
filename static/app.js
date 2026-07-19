@@ -274,6 +274,26 @@ async function loadSnapshot(ts) {
   updateTable(currentNodes);
 }
 
+// Unique nodes over a rolling window (union across snapshots) — the metric
+// bitnodes-style trackers report, shown next to the instantaneous count.
+async function loadWindowStats() {
+  const note = document.getElementById("window-note");
+  try {
+    const data = await fetchJSON("/api/v1/stats/window");
+    const w = (data.windows || []).find((x) => x.days === 8)
+      || (data.windows || []).slice(-1)[0];
+    if (!w || !w.total) return;
+    note.textContent =
+      `Unique over ${w.days} days (${fmt.format(w.snapshots)} snapshots): ` +
+      `${fmt.format(w.total)} total — clearnet ${fmt.format(w.clearnet)}, ` +
+      `Tor ${fmt.format(w.tor)}, I2P ${fmt.format(w.i2p)}. ` +
+      `The count above is reachable simultaneously right now.`;
+    note.hidden = false;
+  } catch (e) {
+    /* no windowed data yet — leave the note hidden */
+  }
+}
+
 // Render the three bar charts + the globe from a stats payload. Split out so
 // the theme toggle can re-render with the new tokens without re-fetching.
 function renderCharts(stats) {
@@ -343,6 +363,7 @@ async function init() {
     select.value = timestamps[timestamps.length - 1];
     await loadSnapshot(timestamps[timestamps.length - 1]);
   }
+  loadWindowStats();
 }
 
 try {

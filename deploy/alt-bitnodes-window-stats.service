@@ -1,0 +1,22 @@
+[Unit]
+Description=alt-bitnodes windowed unique-node counts (rolling-window union)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+Group=__USER__
+WorkingDirectory=__DASHBOARD_DIR__
+Environment=BITNODES_EXPORT_DIR=__EXPORT_DIR__
+# Reads hundreds of snapshots; nice it so it yields to the crawler.
+Nice=15
+ExecStart=__DASHBOARD_DIR__/venv/bin/python window_stats.py
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=__DASHBOARD_DIR__/data
+
+[Install]
+WantedBy=multi-user.target

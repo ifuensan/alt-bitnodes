@@ -12,6 +12,7 @@ from queries import (
     find_archive_file,
     group_by_ip_detail,
     list_archives,
+    load_window_stats,
     groups_by_ip,
     known_addresses_set,
     list_snapshots,
@@ -246,6 +247,12 @@ def v1_groups_by_ip() -> dict:
 
 
 ARCHIVE_MEDIA_TYPES = {"csv": "text/csv", "parquet": "application/vnd.apache.parquet"}
+
+
+@app.get("/api/v1/stats/window", tags=["v1"],
+         summary="Unique nodes per network over rolling windows (union)")
+def v1_window_stats() -> dict:
+    return load_window_stats()
 
 
 @app.get("/api/v1/archives/", tags=["v1"], summary="List archived snapshot photos")
