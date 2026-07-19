@@ -13,7 +13,10 @@ from pathlib import Path
 from queries.config import EXPORT_DIR, WINDOW_STATS_FILE
 from queries.snapshots import list_snapshots, load_snapshot
 
-WINDOWS_DAYS = (1, 3, 8)
+# 5 days matches the upstream crawler's max node-age (max_age up to 432000s),
+# so it's the exact apples-to-apples window vs bitnodes-style trackers; 8 days
+# matches bitnod.es's stated pruning; 1/3 bracket the recent-config figure.
+WINDOWS_DAYS = (1, 3, 5, 8)
 DAY_SECONDS = 86400
 
 
