@@ -15,12 +15,12 @@
 ## 2. Deploy and verify
 
 - [x] 2.1 Commit, push, CI green.
-- [ ] 2.2 Verify on host: i2pd active, 7656 listening, crawler on the new
+- [x] 2.2 Verify on host: i2pd active, 7656 listening, crawler on the new
       branch, no errors in crawl/ping logs.
-- [ ] 2.3 Within a few hours: first `.b32.i2p` nodes in snapshots.
+- [x] 2.3 Within a few hours: first `.b32.i2p` nodes in snapshots.
 
 ## 3. Bookkeeping
 
-- [ ] 3.1 Update `docs/follow-ups.md` (I2P item → done; note upstream-PR
+- [x] 3.1 Update `docs/follow-ups.md` (I2P item → done; note upstream-PR
       follow-up after a week of soak).
-- [ ] 3.2 Archive change, sync `openspec/specs/i2p-crawling/`.
+- [x] 3.2 Archive change, sync `openspec/specs/i2p-crawling/`.

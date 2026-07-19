@@ -56,8 +56,10 @@ by hand or codify then.
 
 ### I2P SAM crawl integration
 
-**Status**: Research complete
-(`_bmad-output/planning-artifacts/research/technical-bitcoin-i2p-nodes-crawling-research-2026-05-13.md`).
-Estimated ~9h coding + ~4h infra. Branch `feat/i2p-sam-crawl` on
-`ifuensan/bitnodes`. Next concrete coding session whenever the user
-decides to start.
+**Status**: Done 2026-07-19. Live in production: 4.7k reachable I2P nodes.
+Required three fixes beyond the initial SAM client (validated only against
+a fake bridge): seed nodes (clearnet peers don't gossip I2P — ship 512
+mainnet seeds from bitcoin/bitcoin), INFO instrumentation, and THE bug —
+serialize_network_address classified .b32.i2p as IPv4 (it has dots) and
+crashed the Bitcoin version handshake on inet_pton. No upstream PR
+(ayeowch/bitnodes unmaintained); the fork is the living lineage.
