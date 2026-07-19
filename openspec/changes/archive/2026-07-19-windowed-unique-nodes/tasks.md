@@ -24,10 +24,10 @@
 - [x] 3.1 `deploy/alt-bitnodes-window-stats.{service,timer}` (oneshot,
       hourly + jitter, niced, dashboard venv/user); wire into `install.sh`
       (crawler fingerprint untouched).
-- [ ] 3.2 Commit, push, CI green, "Crawler unchanged" in deploy log.
-- [ ] 3.3 Verify on production: first run writes the cache, endpoint returns
+- [x] 3.2 Commit, push, CI green, "Crawler unchanged" in deploy log.
+- [x] 3.3 Verify on production: first run writes the cache, endpoint returns
       the windowed counts, dashboard shows both figures.
 
 ## 4. Bookkeeping
 
-- [ ] 4.1 Archive change, sync `windowed-stats` spec.
+- [x] 4.1 Archive change, sync `windowed-stats` spec.
