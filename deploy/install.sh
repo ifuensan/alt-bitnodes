@@ -24,7 +24,7 @@ USER_AGENT="${BITNODES_USER_AGENT:-/alt-bitnodes:0.1/}"
 # Extra Tor instances (tor@bitnodes1..N on SocksPorts 9051..905N) besides the
 # distro default on 9050. Tor is single-threaded; the crawler spreads onion
 # dials across every proxy listed in tor_proxies.
-TOR_POOL_SIZE=5
+TOR_POOL_SIZE=8
 
 log() { printf '\n\033[1;36m==>\033[0m %s\n' "$*"; }
 
@@ -91,14 +91,14 @@ ensure_conf_key() {
 
 setup_tor_pool() {
   log "Provisioning Tor SOCKS pool (tor@bitnodes1..${TOR_POOL_SIZE})"
-  # Rendezvous circuits are per-.onion and unshareable, so onion coverage
-  # needs far more parallel builds than Tor's default 32-pending cap (which
-  # throttled us to ~12 onions). But 1024 over-corrected: the pool's crypto
-  # saturated all 8 vCPUs (load ~7.3, Tor ~475% CPU) and onion decayed as
-  # circuit upkeep lost the CPU race. RAM was never the constraint (~24%).
-  # 256 is the middle ground: enough parallelism to sustain thousands of
-  # onions without pinning the box. Revisit (or resize) from real numbers.
-  local tor_opts="MaxClientCircuitsPending 256
+  # Tor is single-threaded: each daemon tops out at ~1 core regardless of
+  # box-wide idle. A full-day sar showed the c7g.2xlarge at only ~64% busy
+  # (36% idle) while onion decayed -- the ceiling was per-daemon thread
+  # pressure, not global CPU. The lever is MORE daemons spread across the
+  # idle cores, not a lower cap: cap 32 throttled (~12 onions), 1024
+  # saturated per-thread, 256 starved circuit builds (~40 onions after 8h).
+  # 9 daemons (pool 8 + default) at cap 512 use the idle headroom.
+  local tor_opts="MaxClientCircuitsPending 512
 NumEntryGuards 8"
   local i name port torrc desired
   for i in $(seq 1 "${TOR_POOL_SIZE}"); do
