@@ -1,0 +1,14 @@
+# Crawler stack logs grow unbounded (run-bitnodes.sh appends with >>). Rotate
+# them so a chatty log can never fill the 15 GB root disk again (which took
+# i2pd down on 2026-07-20). copytruncate because the crawler/ping/export
+# processes hold these files open for the life of the service.
+__CRAWLER_DIR__/log/*.out {
+    daily
+    rotate 5
+    maxsize 100M
+    copytruncate
+    missingok
+    notifempty
+    compress
+    delaycompress
+}

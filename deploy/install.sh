@@ -245,6 +245,11 @@ setup_dashboard() {
 }
 
 install_systemd_units() {
+  log "Installing logrotate for crawler logs"
+  sed "s|__CRAWLER_DIR__|${CRAWLER_DIR}|g" \
+    "${DASHBOARD_DIR}/deploy/logrotate-bitnodes" > /etc/logrotate.d/bitnodes
+  chmod 0644 /etc/logrotate.d/bitnodes
+
   log "Installing systemd units"
   install -m 0644 "${DASHBOARD_DIR}/deploy/bitnodes.service" /etc/systemd/system/bitnodes.service
   install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes.service" /etc/systemd/system/alt-bitnodes.service
