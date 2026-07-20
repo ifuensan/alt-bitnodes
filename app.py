@@ -32,7 +32,12 @@ logger = logging.getLogger("alt-bitnodes")
 ERR_SNAPSHOT_NOT_FOUND = "snapshot not found"
 ERR_NO_SNAPSHOTS = "no snapshots available yet"
 
-app = FastAPI(title="alt-bitnodes")
+# redirect_slashes disabled: a missing/extra trailing slash otherwise triggers
+# a 307 whose Location is built from the Host uvicorn sees — and CloudFront
+# forwards the origin hostname (origin.hacknodes.xyz), leaking it and pointing
+# clients at a host the security group drops. Routes match their exact paths;
+# the documented URLs carry the correct slashes.
+app = FastAPI(title="alt-bitnodes", redirect_slashes=False)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 

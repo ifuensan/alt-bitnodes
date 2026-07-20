@@ -12,9 +12,9 @@
 
 ## 2. Deploy
 
-- [ ] 2.1 Commit, push, CI green, "Crawler unchanged" in deploy log.
-- [ ] 2.2 Verify on production: MCP lists the new tools and they return data.
+- [x] 2.1 Commit, push, CI green, "Crawler unchanged" in deploy log.
+- [x] 2.2 Verify on production: MCP lists the new tools and they return data.
 
 ## 3. Bookkeeping
 
-- [ ] 3.1 Archive change, sync `mcp-service` spec.
+- [x] 3.1 Archive change, sync `mcp-service` spec.
