@@ -7,10 +7,13 @@ from mcp.server.fastmcp import FastMCP
 from queries import (
     NoSnapshotsError,
     SnapshotMissingError,
+    find_archive_file,
     group_by_ip_detail,
     groups_by_ip,
+    list_archives as _list_archives,
     list_snapshots as _list_snapshots,
     load_snapshot,
+    load_window_stats,
     node_status,
     parse_node_id,
     rankings_by_asn,
@@ -124,8 +127,54 @@ def register(mcp: FastMCP) -> None:
         return {"count": len(results), "results": results}
 
     @mcp.tool()
+    def get_network_breakdown() -> dict:
+        """Clearnet / Tor / I2P node counts of the latest snapshot.
+
+        clearnet = IPv4 + IPv6, tor = .onion, i2p = .b32.i2p; the three sum to
+        the snapshot's total.
+        """
+        snaps = _list_snapshots()
+        if not snaps:
+            return {"error": "no snapshots available yet"}
+        try:
+            stats = snapshot_stats(snaps[-1])
+        except FileNotFoundError:
+            return {"error": "latest snapshot missing on disk"}
+        return {
+            "timestamp": snaps[-1],
+            "clearnet": stats["clearnet"],
+            "tor": stats["tor"],
+            "i2p": stats["i2p"],
+            "total": stats["total"],
+        }
+
+    @mcp.tool()
+    def get_window_stats() -> dict:
+        """Unique nodes per network over rolling windows (union across
+        snapshots) — the metric bitnodes-style trackers report. Served from a
+        precomputed cache; returns an empty `windows` list if not yet built.
+        """
+        return load_window_stats()
+
+    @mcp.tool()
+    def list_archives() -> dict:
+        """Archived snapshot photos (daily/weekly/monthly) with per-format
+        download URLs. Returns metadata and URLs, not the file contents."""
+        results = _list_archives()
+        return {"count": len(results), "results": results}
+
+    @mcp.tool()
+    def get_archive_url(timestamp: int, fmt: Literal["csv", "parquet"]) -> dict:
+        """Download URL for one archived snapshot photo in the given format."""
+        path = find_archive_file(timestamp, fmt)
+        if path is None:
+            return {"error": "archive not found for that timestamp/format"}
+        return {"timestamp": timestamp, "format": fmt,
+                "url": f"/api/v1/archives/{timestamp}.{fmt}"}
+
+    @mcp.tool()
     def get_chart_data(
-        chart: Literal["reachable", "by_country", "by_version"],
+        chart: Literal["reachable", "by_country", "by_version", "by_network"],
         window: Literal["24h", "7d", "30d"] = "24h",
     ) -> dict:
         """Aggregate chart data computed over the latest snapshot.
@@ -156,6 +205,16 @@ def register(mcp: FastMCP) -> None:
                 "chart": chart,
                 "window": window,
                 "results": stats["top_user_agents"],
+            }
+        if chart == "by_network":
+            return {
+                "chart": chart,
+                "window": window,
+                "results": {
+                    "clearnet": stats["clearnet"],
+                    "tor": stats["tor"],
+                    "i2p": stats["i2p"],
+                },
             }
         return {"error": f"unknown chart {chart}"}
 
