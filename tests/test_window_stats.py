@@ -60,6 +60,15 @@ def test_write_and_load_roundtrip(write_snapshot, tmp_path):
     assert _win(loaded, 1)["total"] == 1
 
 
+def test_generated_at_is_set_without_now(write_snapshot):
+    # In production the timer calls with now=None; generated_at must still be
+    # populated (anchored to the latest snapshot), not null.
+    ts = ts_at(TODAY - dt.timedelta(hours=1))
+    write_snapshot(ts, [make_row()])
+    result = ws.compute_window_stats()  # now=None, like production
+    assert result["generated_at"] == ts
+
+
 def test_load_missing_cache_is_empty(tmp_path):
     assert ws.load_window_stats(path=tmp_path / "nope.json") == {
         "generated_at": None, "windows": []

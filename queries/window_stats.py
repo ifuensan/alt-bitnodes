@@ -38,16 +38,19 @@ def compute_window_stats(windows_days=WINDOWS_DAYS, now: int = None) -> dict:
     """
     snaps = list_snapshots()
     windows = sorted(windows_days)
+    # generated_at = the snapshot the windows are anchored to (the latest, or
+    # the explicit `now`), so consumers can detect staleness. In production the
+    # timer calls this with now=None, so anchoring to snaps[-1] keeps the field
+    # meaningful instead of the null it used to be.
+    reference = now if now is not None else (snaps[-1] if snaps else None)
     result = {
-        "generated_at": now,
+        "generated_at": reference,
         "windows": [],
     }
     if not snaps:
         for d in windows:
             result["windows"].append(_empty_window(d))
         return result
-
-    reference = now if now is not None else snaps[-1]
     cutoffs = {d: reference - d * DAY_SECONDS for d in windows}
     # One set of unique (addr, port) per (window, network).
     sets = {d: {n: set() for n in ("ipv4", "ipv6", "tor", "i2p")} for d in windows}

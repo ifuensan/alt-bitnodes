@@ -37,20 +37,31 @@ def _load_rows(timestamp: int) -> list[list]:
     return json.loads((EXPORT_DIR / f"{timestamp}.json").read_text())
 
 
+def _photo_complete(tier: str, timestamp: int) -> bool:
+    return all(photo_path(tier, timestamp, f).exists() for f in ("parquet", "csv"))
+
+
 def _write_photo(tier: str, timestamp: int, rows: list[list]) -> None:
+    """Materialise both formats (idempotent per format). Writes go to a temp
+    file then rename, so a crash/ENOSPC never leaves a truncated photo that
+    scan_archive would count as done and rotation would make permanent."""
     columns = {field: [row[i] for row in rows] for i, field in enumerate(FIELDS)}
 
     parquet_path = photo_path(tier, timestamp, "parquet")
     parquet_path.parent.mkdir(parents=True, exist_ok=True)
     if not parquet_path.exists():
-        pq.write_table(pa.table(columns), parquet_path)
+        tmp = parquet_path.with_suffix(".parquet.tmp")
+        pq.write_table(pa.table(columns), tmp)
+        tmp.replace(parquet_path)
 
     csv_path = photo_path(tier, timestamp, "csv")
     if not csv_path.exists():
-        with csv_path.open("w", newline="") as f:
+        tmp = csv_path.with_suffix(".csv.tmp")
+        with tmp.open("w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(FIELDS)
             writer.writerows(rows)
+        tmp.replace(csv_path)
 
 
 def run(today: dt.date = None) -> dict:
@@ -72,6 +83,16 @@ def run(today: dt.date = None) -> dict:
     for ts, tier in sorted(keep.items()):
         current_tier = archived.get(ts)
         if current_tier == tier:
+            # Already in the right tier — but repair a missing/half-written
+            # format (crash between the two writes) while the raw is still on
+            # disk; otherwise rotation would make the gap permanent.
+            if ts in raw and not _photo_complete(tier, ts):
+                try:
+                    _write_photo(tier, ts, _load_rows(ts))
+                    written += 1
+                except (OSError, ValueError, json.JSONDecodeError) as err:
+                    logger.warning("failed to repair %d: %s", ts, err)
+                    skipped += 1
             continue
         if current_tier is not None:
             # Cascade to a coarser tier by moving the existing files.

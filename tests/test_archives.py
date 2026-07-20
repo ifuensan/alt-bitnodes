@@ -134,6 +134,16 @@ class TestArchiverRun:
         assert archived.get(stamps[-1]) == "weekly"
         assert all(ts not in archived for ts in stamps[:-1])
 
+    def test_repairs_a_missing_format(self, write_snapshot, archive_dir):
+        ts = self._write_raw(write_snapshot, TODAY - dt.timedelta(days=1))
+        archiver.run(today=TODAY)
+        # Simulate a crash between the two format writes: drop the CSV.
+        photo_path("daily", ts, "csv").unlink()
+        stats = archiver.run(today=TODAY)
+        # Re-run must rewrite the missing format, not skip it as "done".
+        assert stats["written"] == 1
+        assert photo_path("daily", ts, "csv").exists()
+
     def test_never_orphans_a_period(self, write_snapshot, archive_dir, export_dir):
         d = TODAY - dt.timedelta(days=2)
         ts = self._write_raw(write_snapshot, d)
