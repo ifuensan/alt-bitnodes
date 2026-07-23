@@ -23,7 +23,7 @@
 - [x] 2.2 `deploy/`: `alt-bitnodes-collector.service` + `.timer`
       (10 min, niced), placeholder substitution in `install.sh`, wired
       into the deploy fingerprint
-- [ ] 2.3 Verify on prod: JSON files appear, Redis load acceptable
+- [x] 2.3 Verify on prod: JSON files appear, Redis load acceptable
       (read-only SCAN/ZRANGE), prune works
 
 ## 3. API — app.py
@@ -53,7 +53,7 @@
       tooltips with bit values
 - [x] 4.6 Research page — unique-nodes section: stacked N-composition bar
       + 1/N method description (deep-link target from band 2)
-- [ ] 4.7 Lazy, independent section rendering on /research; verify both
+- [x] 4.7 Lazy, independent section rendering on /research; verify both
       themes on both pages; CloudFront invalidation incl. new route
 
 ## 5. MCP — alt_bitnodes_mcp
@@ -67,8 +67,8 @@
 
 - [x] 6.1 Update README/API docs with the three new endpoints and
       definitions (first-heard propagation, 1/N method limitation)
-- [ ] 6.2 Full test run + deploy + smoke-test endpoints on prod
-- [ ] 6.3 Archive the change into `openspec/changes/archive/` and sync
+- [x] 6.2 Full test run + deploy + smoke-test endpoints on prod
+- [x] 6.3 Archive the change into `openspec/changes/archive/` and sync
       `openspec/specs/`
 
 ### Review Findings (bmad-code-review 2026-07-23)
