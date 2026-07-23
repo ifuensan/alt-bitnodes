@@ -64,19 +64,26 @@ def paginate(items: list, page: int, limit: int, base_path: str) -> dict:
 # Internal API (used by the dashboard frontend)
 # ---------------------------------------------------------------------------
 
+# HTML entry points must always revalidate so a new deploy's cache-busted
+# asset URLs (?v=<sha>, stamped by install.sh) reach the client. Static
+# assets themselves carry a changed URL on every content change, so they
+# can never be served stale against fresh HTML.
+_HTML_NO_CACHE = {"Cache-Control": "no-cache"}
+
+
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse("templates/index.html")
+    return FileResponse("templates/index.html", headers=_HTML_NO_CACHE)
 
 
 @app.get("/archive")
 def archive_page() -> FileResponse:
-    return FileResponse("templates/archive.html")
+    return FileResponse("templates/archive.html", headers=_HTML_NO_CACHE)
 
 
 @app.get("/research")
 def research_page() -> FileResponse:
-    return FileResponse("templates/research.html")
+    return FileResponse("templates/research.html", headers=_HTML_NO_CACHE)
 
 
 @app.get("/api/snapshots")

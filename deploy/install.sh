@@ -253,6 +253,19 @@ setup_dashboard() {
   sudo -u "${INSTALL_USER}" "${DASHBOARD_DIR}/venv/bin/pip" install -q -r "${DASHBOARD_DIR}/requirements.txt"
 
   sudo -u "${INSTALL_USER}" mkdir -p "${DASHBOARD_DIR}/data"
+
+  # Cache-bust static assets by stamping the deployed commit into their
+  # URLs (?v=<sha>). A content change ships a new URL, so no browser or
+  # CloudFront edge can ever serve a stale app.js/app.css against fresh
+  # HTML — the recurring "forgot to invalidate CloudFront" breakage.
+  # Idempotent: replaces whatever ?v= value is present, so re-runs are safe
+  # and `git reset --hard` (which restores the ?v=dev placeholder) re-stamps.
+  local sha
+  sha="$(git -C "${DASHBOARD_DIR}" rev-parse --short HEAD)"
+  sudo -u "${INSTALL_USER}" sed -i -E \
+    "s#(/static/[a-zA-Z0-9._-]+\?v=)[^\"']*#\1${sha}#g" \
+    "${DASHBOARD_DIR}"/templates/*.html
+  log "Stamped static asset version: ${sha}"
 }
 
 install_systemd_units() {
