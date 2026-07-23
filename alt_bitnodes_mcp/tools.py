@@ -10,7 +10,10 @@ from queries import (
     find_archive_file,
     group_by_ip_detail,
     groups_by_ip,
+    latest_services_payload,
     list_archives as _list_archives,
+    load_propagation,
+    load_unique_estimate,
     list_snapshots as _list_snapshots,
     load_snapshot,
     load_window_stats,
@@ -155,6 +158,45 @@ def register(mcp: FastMCP) -> None:
         precomputed cache; returns an empty `windows` list if not yet built.
         """
         return load_window_stats()
+
+    @mcp.tool()
+    def get_block_propagation() -> dict:
+        """Block-propagation stats per network class (ipv4/ipv6/tor/i2p):
+        pooled ECDF over recent blocks plus a per-block list with p50/p90.
+        Times are relative to the first announcement this crawler observed —
+        one vantage point, not absolute latency. Served from the collector's
+        cache; `blocks` is empty (with a note) until it has run."""
+        data = load_propagation()
+        if not data["blocks"]:
+            data["note"] = ("no propagation data collected yet — the "
+                            "collector persists blocks ~30 min after their "
+                            "first announcement")
+        return data
+
+    @mcp.tool()
+    def get_services_breakdown() -> dict:
+        """Service-flag adoption (NODE_P2P_V2/BIP324, NODE_COMPACT_FILTERS,
+        NODE_NETWORK_LIMITED, …): latest-snapshot counts per network class
+        plus a daily adoption series. `derived.pruned` counts nodes with
+        NODE_NETWORK_LIMITED but not NODE_NETWORK — per BIP159 the raw
+        LIMITED flag is signaled by full nodes too and is NOT a pruned
+        count. `latest` is null (with a note) when no snapshot exists."""
+        data = latest_services_payload()
+        if data["latest"] is None:
+            data["note"] = "no snapshots available yet"
+        return data
+
+    @mcp.tool()
+    def get_unique_nodes_estimate() -> dict:
+        """Deduplicated node estimate: each reachable address weighted 1/N
+        over the network types in its advertised addr gossip, with the raw
+        reachable count, per-class weighted sums, and the N-composition
+        histogram. `estimate` is null (with a note) until the collector has
+        run."""
+        data = load_unique_estimate()
+        if data["estimate"] is None:
+            data["note"] = "no estimate computed yet — collector has not run"
+        return data
 
     @mcp.tool()
     def list_archives() -> dict:

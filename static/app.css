@@ -119,20 +119,61 @@ header h1 {
 }
 #theme-toggle:hover { color: var(--text); }
 
-/* --- Stat tiles (KPIs) — one continuous strip, not floating cards --------- */
-.kpis {
-  display: grid; grid-template-columns: repeat(7, 1fr);
-  margin: var(--lg) var(--xl);
+/* --- Header nav tabs ------------------------------------------------------ */
+.tabs { display: flex; gap: var(--sm); }
+.tabs a {
+  padding: var(--xs) var(--md);
+  font-size: 11px; font-weight: 500; letter-spacing: 0.6px;
+  text-transform: uppercase; text-decoration: none;
+  color: var(--muted);
+  border: 1px solid var(--border); border-radius: 0;
   background: var(--surface);
-  border: 1px solid var(--border);
 }
+.tabs a:hover { color: var(--text); }
+.tabs a.active { color: var(--primary); border-color: var(--primary); }
+
+/* --- KPI matrix: three bands sharing four columns + side cluster ---------- */
+.kpi-layout {
+  display: grid; grid-template-columns: 3fr 1fr; gap: var(--lg);
+  margin: var(--lg) var(--xl);
+}
+.kpi-matrix {
+  display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.band { border-bottom: 1px solid var(--border); }
+.band:last-child { border-bottom: none; }
+.band-title {
+  margin: 0; padding: var(--sm) var(--md) 0;
+  font-size: 10px; font-weight: 500; letter-spacing: 0.6px;
+  text-transform: uppercase; color: var(--muted);
+  display: flex; justify-content: space-between; align-items: baseline;
+}
+.band-link {
+  color: var(--primary); text-decoration: none;
+  font-size: 10px; letter-spacing: 0.4px; text-transform: lowercase;
+}
+.band-link:hover { text-decoration: underline; }
+.band-cells { display: grid; grid-template-columns: repeat(4, 1fr); }
+.kpi-side {
+  display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.kpi-side .kpi { border-right: none; border-bottom: 1px solid var(--border-dim); }
+.services-strip {
+  display: block; margin-top: auto;
+  padding: var(--sm) var(--md);
+  font-size: 10px; font-weight: 500; letter-spacing: 0.5px;
+  color: var(--muted); text-decoration: none;
+  border-top: 1px solid var(--border-dim);
+}
+.services-strip:hover { color: var(--primary); }
 @media (max-width: 720px) {
-  .kpis { grid-template-columns: repeat(2, 1fr); }
+  .kpi-layout { grid-template-columns: 1fr; }
+  .band-cells { grid-template-columns: repeat(2, 1fr); }
 }
-.window-note {
-  margin: calc(-1 * var(--md)) var(--xl) var(--lg);
-  font-size: 11px; color: var(--muted); letter-spacing: 0.3px;
-}
+
+/* --- Stat tiles (KPIs) ----------------------------------------------------- */
 .kpi {
   padding: var(--md);
   display: flex; flex-direction: column; gap: var(--xs);
@@ -212,6 +253,31 @@ tr:hover td { background: var(--surface-2); }
 /* --- Charts --------------------------------------------------------------- */
 .plot { width: 100%; min-height: 240px; }
 .plot svg { display: block; }
+
+/* --- Research page --------------------------------------------------------- */
+.research-grid { margin-top: var(--lg); }
+.subhead {
+  margin: var(--lg) 0 var(--md);
+  font-size: 10px; font-weight: 500; letter-spacing: 0.6px;
+  text-transform: uppercase; color: var(--muted);
+}
+.section-note { font-size: 11px; color: var(--muted); letter-spacing: 0.3px; }
+.plot-short { min-height: 90px; }
+.prop-table-wrap { max-height: 320px; margin-top: var(--md); }
+#prop-blocks tbody tr { cursor: pointer; }
+#prop-blocks tbody tr.selected td {
+  background: var(--surface-2);
+  border-left: 2px solid var(--primary);
+}
+#prop-blocks td.hash { color: var(--text-dim); }
+#prop-aggregate, #services-toggle {
+  background: var(--surface-2); color: var(--text-dim);
+  border: 1px solid var(--border);
+  font-family: var(--font); font-size: 10px; letter-spacing: 0.6px;
+  padding: var(--xs) var(--sm); border-radius: 0;
+  cursor: pointer;
+}
+#prop-aggregate:hover, #services-toggle:hover { color: var(--text); }
 
 /* --- Footer --------------------------------------------------------------- */
 footer {

@@ -16,6 +16,15 @@ ARCHIVE_DIR = Path(os.environ.get("BITNODES_ARCHIVE_DIR", "data/archive"))
 WINDOW_STATS_FILE = Path(
     os.environ.get("BITNODES_WINDOW_STATS_FILE", "data/window-stats.json")
 )
+SERVICES_SERIES_FILE = Path(
+    os.environ.get("BITNODES_SERVICES_SERIES_FILE", "data/services-series.json")
+)
+UNIQUE_STATS_FILE = Path(
+    os.environ.get("BITNODES_UNIQUE_STATS_FILE", "data/unique-nodes.json")
+)
+PROPAGATION_DIR = Path(
+    os.environ.get("BITNODES_PROPAGATION_DIR", "data/propagation")
+)
 OPENDATA_TTL_SECONDS = 10
 
 FIELDS = [

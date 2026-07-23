@@ -11,7 +11,11 @@ from queries import (
     SnapshotMissingError,
     find_archive_file,
     group_by_ip_detail,
+    latest_services_payload,
     list_archives,
+    load_block,
+    load_propagation,
+    load_unique_estimate,
     load_window_stats,
     groups_by_ip,
     known_addresses_set,
@@ -70,6 +74,11 @@ def archive_page() -> FileResponse:
     return FileResponse("templates/archive.html")
 
 
+@app.get("/research")
+def research_page() -> FileResponse:
+    return FileResponse("templates/research.html")
+
+
 @app.get("/api/snapshots")
 def snapshots() -> dict:
     return {"timestamps": list_snapshots(), "export_dir": str(EXPORT_DIR)}
@@ -90,6 +99,33 @@ def snapshot_stats_endpoint(timestamp: int) -> dict:
         return snapshot_stats(timestamp)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=ERR_SNAPSHOT_NOT_FOUND)
+
+
+# Latent-crawler-data sections. All three serve collector-precomputed JSON;
+# an empty dataset is HTTP 200 with an empty payload, never an error.
+
+@app.get("/api/propagation")
+def propagation() -> dict:
+    return load_propagation()
+
+
+@app.get("/api/propagation/block/{block_hash}",
+         responses={404: {"description": "block not collected"}})
+def propagation_block(block_hash: str) -> dict:
+    doc = load_block(block_hash)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="block not collected")
+    return doc
+
+
+@app.get("/api/services")
+def services() -> dict:
+    return latest_services_payload()
+
+
+@app.get("/api/unique-nodes")
+def unique_nodes() -> dict:
+    return load_unique_estimate()
 
 
 @app.get("/api/latest", responses={404: {"description": ERR_NO_SNAPSHOTS}})
@@ -258,6 +294,24 @@ ARCHIVE_MEDIA_TYPES = {"csv": "text/csv", "parquet": "application/vnd.apache.par
          summary="Unique nodes per network over rolling windows (union)")
 def v1_window_stats() -> dict:
     return load_window_stats()
+
+
+@app.get("/api/v1/stats/propagation/", tags=["v1"],
+         summary="Block propagation ECDF per network class (first-heard relative)")
+def v1_propagation() -> dict:
+    return load_propagation()
+
+
+@app.get("/api/v1/stats/services/", tags=["v1"],
+         summary="Service-flag adoption: latest snapshot + daily series")
+def v1_services() -> dict:
+    return latest_services_payload()
+
+
+@app.get("/api/v1/stats/unique-nodes/", tags=["v1"],
+         summary="Weighted unique-node estimate (1/N over advertised network types)")
+def v1_unique_nodes() -> dict:
+    return load_unique_estimate()
 
 
 @app.get("/api/v1/archives/", tags=["v1"], summary="List archived snapshot photos")

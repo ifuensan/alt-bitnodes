@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pesquisa Research</title>
+<script>
+  // Anti-FOUC: resolve the theme before first paint.
+  (function () {
+    try {
+      var t = localStorage.getItem("pesquisa:theme");
+      if (t !== "light" && t !== "dark") {
+        t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      }
+      document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+  })();
+</script>
+<link rel="preload" href="/static/fonts/JetBrainsMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header>
+  <h1>Pesquisa Research</h1>
+  <nav class="tabs">
+    <a href="/">Overview</a>
+    <a href="/research" class="active">Research</a>
+    <a href="/archive">Archive</a>
+  </nav>
+  <div class="controls">
+    <button id="theme-toggle" type="button" aria-label="Toggle theme"></button>
+  </div>
+</header>
+
+<section class="grid research-grid">
+  <div class="panel panel-full" id="propagation">
+    <div class="panel-head">
+      <h2>Block propagation — ECDF per network</h2>
+      <button id="prop-aggregate" type="button" hidden>Aggregate</button>
+    </div>
+    <p class="panel-note" id="prop-caption"></p>
+    <div id="chart-propagation" class="plot"></div>
+    <p class="section-note" id="prop-note" hidden></p>
+    <div class="table-wrap prop-table-wrap">
+      <table id="prop-blocks">
+        <thead>
+          <tr>
+            <th>Height≈</th><th>Block</th><th>Nodes</th>
+            <th>p50 IPv4</th><th>p50 Tor</th><th>p50 I2P</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel panel-full" id="services">
+    <div class="panel-head">
+      <h2>Service flags — adoption</h2>
+      <button id="services-toggle" type="button" hidden>By network</button>
+    </div>
+    <div id="chart-services" class="plot"></div>
+    <h2 class="subhead">Adoption over time (daily)</h2>
+    <div id="chart-services-history" class="plot"></div>
+    <p class="section-note" id="services-note" hidden></p>
+  </div>
+
+  <div class="panel panel-full" id="unique">
+    <h2>Unique-node estimate — 1/N composition</h2>
+    <p class="panel-note" id="unique-numbers"></p>
+    <div id="chart-composition" class="plot plot-short"></div>
+    <p class="section-note" id="unique-method"></p>
+  </div>
+</section>
+
+<footer>
+  <p>
+    Times in the propagation chart are relative to the first announcement
+    observed by this crawler — one vantage point, not absolute network latency.
+  </p>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0"
+        integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i"
+        crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6.17"
+        integrity="sha384-JUpn2GgRr0gxU0xOBd8D8P634jhRCwobtG8G2MMEkX1RnGJ7/FJNnuukpfT+H2w1"
+        crossorigin="anonymous"></script>
+<script type="module" src="/static/research.js"></script>
+</body>
+</html>

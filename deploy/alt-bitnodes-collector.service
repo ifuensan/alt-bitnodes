@@ -1,0 +1,22 @@
+[Unit]
+Description=alt-bitnodes latent-data collector (propagation + services + unique)
+After=network-online.target redis-server.service
+
+[Service]
+Type=oneshot
+User=__USER__
+Group=__USER__
+WorkingDirectory=__DASHBOARD_DIR__
+Environment=BITNODES_EXPORT_DIR=__EXPORT_DIR__
+# Read-only Redis sweeps + snapshot reads; yield to the crawler.
+Nice=15
+ExecStart=__DASHBOARD_DIR__/venv/bin/python collector.py
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=__DASHBOARD_DIR__/data
+
+[Install]
+WantedBy=multi-user.target

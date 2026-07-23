@@ -106,7 +106,17 @@ GET /api/v1/rankings/countries/        agregado por país
 GET /api/v1/rankings/asns/             agregado por ASN
 GET /api/v1/rankings/user-agents/      agregado por user-agent
 GET /api/v1/groups/by-ip/              IPs que hospedan más de un nodo
+GET /api/v1/stats/window               nodos únicos por red en ventanas (unión)
+GET /api/v1/stats/propagation/         propagación de bloques (ECDF por red)
+GET /api/v1/stats/services/            adopción de service flags + serie diaria
+GET /api/v1/stats/unique-nodes/        estimación de nodos únicos (método 1/N)
 ```
+
+Notas de definición: los tiempos de propagación son **relativos al primer
+anuncio observado por este crawler** (un solo punto de vista, no latencia
+absoluta de la red); la estimación de nodos únicos pondera cada dirección
+alcanzable 1/N según los tipos de red presentes en su gossip `addr`
+anunciado (no puede deduplicar múltiples direcciones del mismo tipo de red).
 
 ### Geolocalización (GeoIP)
 
@@ -251,7 +261,17 @@ GET /api/v1/rankings/countries/        per-country aggregate
 GET /api/v1/rankings/asns/             per-ASN aggregate
 GET /api/v1/rankings/user-agents/      per-user-agent aggregate
 GET /api/v1/groups/by-ip/              IPs hosting more than one node
+GET /api/v1/stats/window               unique nodes per network over windows
+GET /api/v1/stats/propagation/         block propagation (ECDF per network)
+GET /api/v1/stats/services/            service-flag adoption + daily series
+GET /api/v1/stats/unique-nodes/        weighted unique-node estimate (1/N)
 ```
+
+Definition notes: propagation times are **relative to the first announcement
+observed by this crawler** (one vantage point, not absolute network latency);
+the unique-node estimate weights each reachable address 1/N over the network
+types present in its advertised `addr` gossip (it cannot deduplicate multiple
+addresses of the same network type).
 
 ### Geolocation (GeoIP)
 

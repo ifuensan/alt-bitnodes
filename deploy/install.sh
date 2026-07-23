@@ -98,8 +98,19 @@ setup_tor_pool() {
   # idle cores, not a lower cap: cap 32 throttled (~12 onions), 1024
   # saturated per-thread, 256 starved circuit builds (~40 onions after 8h).
   # 9 daemons (pool 8 + default) at cap 512 use the idle headroom.
+  #
+  # UseEntryGuards 0 (2026-07-22): a crawler funnels all circuit creation
+  # through 1-2 entry guards per daemon and their per-IP anti-DoS throttles
+  # exactly that (247k circuit timeouts vs 212 completed on one guard;
+  # onion pinned at ~0 under load while the daemons sat idle). Random entry
+  # per circuit spreads creation across the relay set: onion 3 -> ~10.8k
+  # open connections in 13h. No anonymity requirement here, so the guard
+  # trade-off does not apply. NumEntryGuards is inert with it but kept so
+  # the desired torrc byte-matches the live files (a mismatch would rewrite
+  # and restart every daemon, collapsing the ramp).
   local tor_opts="MaxClientCircuitsPending 512
-NumEntryGuards 8"
+NumEntryGuards 8
+UseEntryGuards 0"
   local i name port torrc desired
   for i in $(seq 1 "${TOR_POOL_SIZE}"); do
     name="bitnodes${i}"
@@ -262,6 +273,8 @@ install_systemd_units() {
   install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes-archive.timer" /etc/systemd/system/alt-bitnodes-archive.timer
   install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes-window-stats.service" /etc/systemd/system/alt-bitnodes-window-stats.service
   install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes-window-stats.timer" /etc/systemd/system/alt-bitnodes-window-stats.timer
+  install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes-collector.service" /etc/systemd/system/alt-bitnodes-collector.service
+  install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes-collector.timer" /etc/systemd/system/alt-bitnodes-collector.timer
   install -m 0755 "${DASHBOARD_DIR}/deploy/run-bitnodes.sh" "${CRAWLER_DIR}/run-bitnodes.sh"
   chown "${INSTALL_USER}:${INSTALL_USER}" "${CRAWLER_DIR}/run-bitnodes.sh"
 
@@ -269,13 +282,15 @@ install_systemd_units() {
     /etc/systemd/system/bitnodes.service /etc/systemd/system/alt-bitnodes.service \
     /etc/systemd/system/alt-bitnodes-mcp.service /etc/systemd/system/geoip-update.service \
     /etc/systemd/system/export-prune.service /etc/systemd/system/alt-bitnodes-archive.service \
-    /etc/systemd/system/alt-bitnodes-window-stats.service
+    /etc/systemd/system/alt-bitnodes-window-stats.service \
+    /etc/systemd/system/alt-bitnodes-collector.service
 
   systemctl daemon-reload
   systemctl enable bitnodes.service alt-bitnodes.service alt-bitnodes-mcp.service
   systemctl enable --now export-prune.timer
   systemctl enable --now alt-bitnodes-archive.timer
   systemctl enable --now alt-bitnodes-window-stats.timer
+  systemctl enable --now alt-bitnodes-collector.timer
   # Dashboard + MCP are stateless: restart on every deploy so re-runs pick up
   # unit-file changes. The crawler is stateful (open sockets, onion circuits):
   # restart only if its inputs changed or it isn't running.

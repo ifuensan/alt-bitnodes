@@ -260,10 +260,10 @@ async function loadSnapshot(ts) {
   ]);
   currentNodes = snap.nodes;
   currentStats = stats;
-  document.getElementById("kpi-total").textContent = fmt.format(stats.total);
-  document.getElementById("kpi-clearnet").textContent = fmt.format(stats.clearnet ?? 0);
-  document.getElementById("kpi-tor").textContent = fmt.format(stats.tor ?? 0);
-  document.getElementById("kpi-i2p").textContent = fmt.format(stats.i2p ?? 0);
+  document.getElementById("kpi-now-total").textContent = fmt.format(stats.total);
+  document.getElementById("kpi-now-clearnet").textContent = fmt.format(stats.clearnet ?? 0);
+  document.getElementById("kpi-now-tor").textContent = fmt.format(stats.tor ?? 0);
+  document.getElementById("kpi-now-i2p").textContent = fmt.format(stats.i2p ?? 0);
   document.getElementById("kpi-countries").textContent = fmt.format(stats.countries_total);
   document.getElementById("kpi-asns").textContent = fmt.format(stats.asns_total);
   document.getElementById("kpi-height").textContent = stats.median_height ?? "—";
@@ -274,23 +274,65 @@ async function loadSnapshot(ts) {
   updateTable(currentNodes);
 }
 
-// Unique nodes over a rolling window (union across snapshots) — the metric
-// bitnodes-style trackers report, shown next to the instantaneous count.
+// Band 3 of the KPI matrix: unique nodes over a rolling window (union
+// across snapshots) — the metric bitnodes-style trackers report.
 async function loadWindowStats() {
-  const note = document.getElementById("window-note");
   try {
     const data = await fetchJSON("/api/v1/stats/window");
     const w = (data.windows || []).find((x) => x.days === 8)
       || (data.windows || []).slice(-1)[0];
     if (!w || !w.total) return;
-    note.textContent =
-      `Unique over ${w.days} days (${fmt.format(w.snapshots)} snapshots): ` +
-      `${fmt.format(w.total)} total — clearnet ${fmt.format(w.clearnet)}, ` +
-      `Tor ${fmt.format(w.tor)}, I2P ${fmt.format(w.i2p)}. ` +
-      `The count above is reachable simultaneously right now.`;
-    note.hidden = false;
+    document.getElementById("band-window-title").textContent =
+      `Unique over ${w.days} days (${fmt.format(w.snapshots)} snapshots)`;
+    document.getElementById("kpi-win-total").textContent = fmt.format(w.total);
+    document.getElementById("kpi-win-clearnet").textContent = fmt.format(w.clearnet);
+    document.getElementById("kpi-win-tor").textContent = fmt.format(w.tor);
+    document.getElementById("kpi-win-i2p").textContent = fmt.format(w.i2p);
   } catch (e) {
-    /* no windowed data yet — leave the note hidden */
+    /* no windowed data yet — the band keeps its em-dashes */
+  }
+}
+
+// Band 2: the 1/N-deduplicated estimate. Em-dashes until the collector has
+// produced a dataset.
+async function loadUniqueBand() {
+  try {
+    const est = await fetchJSON("/api/unique-nodes");
+    if (est.estimate == null) return;
+    document.getElementById("kpi-uniq-total").textContent = fmt.format(est.estimate);
+    document.getElementById("kpi-uniq-clearnet").textContent = fmt.format(est.clearnet);
+    document.getElementById("kpi-uniq-tor").textContent = fmt.format(est.tor);
+    document.getElementById("kpi-uniq-i2p").textContent = fmt.format(est.i2p);
+  } catch (e) {
+    /* collector not run yet */
+  }
+}
+
+// Numbers-only services strip under the side tiles; the full charts live on
+// /research. PRUNED uses the derived metric (LIMITED without NETWORK) —
+// BIP159: full nodes signal NODE_NETWORK_LIMITED too, so the raw flag is
+// not a pruned count.
+const STRIP_FLAGS = [
+  ["NODE_P2P_V2", "BIP324"],
+  ["NODE_COMPACT_FILTERS", "FILTERS"],
+];
+
+async function loadServicesStrip() {
+  try {
+    const data = await fetchJSON("/api/services");
+    if (!data.latest) return;
+    const byFlag = Object.fromEntries(data.latest.flags.map((f) => [f.flag, f]));
+    const parts = STRIP_FLAGS
+      .filter(([flag]) => byFlag[flag])
+      .map(([flag, label]) => `${label} ${byFlag[flag].pct}%`);
+    const pruned = data.latest.derived?.pruned;
+    if (pruned) parts.push(`PRUNED ${pruned.pct}%`);
+    if (!parts.length) return;
+    const strip = document.getElementById("services-strip");
+    strip.textContent = parts.join(" · ") + " →";
+    strip.hidden = false;
+  } catch (e) {
+    /* collector not run yet — strip stays hidden */
   }
 }
 
@@ -363,7 +405,10 @@ async function init() {
     select.value = timestamps[timestamps.length - 1];
     await loadSnapshot(timestamps[timestamps.length - 1]);
   }
+  // Secondary bands + strip load lazily after the primary KPIs.
   loadWindowStats();
+  loadUniqueBand();
+  loadServicesStrip();
 }
 
 try {

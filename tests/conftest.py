@@ -14,6 +14,11 @@ _EXPORT_DIR = Path(tempfile.mkdtemp(prefix="alt-bitnodes-test-export-"))
 os.environ["BITNODES_EXPORT_DIR"] = str(_EXPORT_DIR)
 _ARCHIVE_DIR = Path(tempfile.mkdtemp(prefix="alt-bitnodes-test-archive-"))
 os.environ["BITNODES_ARCHIVE_DIR"] = str(_ARCHIVE_DIR)
+_DATA_DIR = Path(tempfile.mkdtemp(prefix="alt-bitnodes-test-data-"))
+os.environ["BITNODES_SERVICES_SERIES_FILE"] = str(_DATA_DIR / "services-series.json")
+os.environ["BITNODES_UNIQUE_STATS_FILE"] = str(_DATA_DIR / "unique-nodes.json")
+os.environ["BITNODES_PROPAGATION_DIR"] = str(_DATA_DIR / "propagation")
+os.environ["BITNODES_WINDOW_STATS_FILE"] = str(_DATA_DIR / "window-stats.json")
 
 import pytest
 
@@ -62,12 +67,19 @@ def write_snapshot(export_dir):
     return _write
 
 
+@pytest.fixture()
+def data_dir() -> Path:
+    return _DATA_DIR
+
+
 @pytest.fixture(autouse=True)
 def _clean_state(export_dir):
     """Reset snapshot files and every module-level cache between tests."""
     for p in export_dir.iterdir():
         p.unlink()
     for p in sorted(_ARCHIVE_DIR.rglob("*"), reverse=True):
+        p.unlink() if p.is_file() else p.rmdir()
+    for p in sorted(_DATA_DIR.rglob("*"), reverse=True):
         p.unlink() if p.is_file() else p.rmdir()
     snapshots.load_snapshot.cache_clear()
     snapshots.snapshot_meta.cache_clear()

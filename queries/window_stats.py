@@ -12,22 +12,13 @@ from pathlib import Path
 
 from queries.config import EXPORT_DIR, WINDOW_STATS_FILE
 from queries.snapshots import list_snapshots, load_snapshot
+from queries.util import classify_network as _classify
 
 # 5 days matches the upstream crawler's max node-age (max_age up to 432000s),
 # so it's the exact apples-to-apples window vs bitnodes-style trackers; 8 days
 # matches bitnod.es's stated pruning; 1/3 bracket the recent-config figure.
 WINDOWS_DAYS = (1, 3, 5, 8)
 DAY_SECONDS = 86400
-
-
-def _classify(address: str) -> str:
-    if address.endswith(".onion"):
-        return "tor"
-    if address.endswith(".b32.i2p"):
-        return "i2p"
-    if ":" in address:
-        return "ipv6"
-    return "ipv4"
 
 
 def compute_window_stats(windows_days=WINDOWS_DAYS, now: int = None) -> dict:

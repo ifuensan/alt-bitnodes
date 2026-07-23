@@ -23,27 +23,61 @@
 <body>
 <header>
   <h1>Pesquisa Dashboard</h1>
+  <nav class="tabs">
+    <a href="/" class="active">Overview</a>
+    <a href="/research">Research</a>
+    <a href="/archive">Archive</a>
+  </nav>
   <div class="controls">
     <label>Snapshot:
       <select id="snapshot-select"></select>
     </label>
     <span id="snapshot-meta"></span>
-    <a href="/archive">Archive</a>
     <button id="theme-toggle" type="button" aria-label="Toggle theme"></button>
   </div>
 </header>
 
-<section class="kpis">
-  <div class="kpi"><span class="value" id="kpi-total">—</span><span class="label">Reachable nodes</span></div>
-  <div class="kpi"><span class="value" id="kpi-clearnet">—</span><span class="label">Clearnet</span></div>
-  <div class="kpi"><span class="value" id="kpi-tor">—</span><span class="label">Tor</span></div>
-  <div class="kpi"><span class="value" id="kpi-i2p">—</span><span class="label">I2P</span></div>
-  <div class="kpi"><span class="value" id="kpi-countries">—</span><span class="label">Countries</span></div>
-  <div class="kpi"><span class="value" id="kpi-asns">—</span><span class="label">Distinct ASNs</span></div>
-  <div class="kpi"><span class="value" id="kpi-height">—</span><span class="label">Median height</span></div>
+<!-- Three-band KPI matrix: the same four columns read vertically across
+     three definitions of "how many nodes" — raw instantaneous, 1/N-deduped
+     instantaneous, and the windowed union. -->
+<section class="kpi-layout">
+  <div class="kpi-matrix">
+    <div class="band">
+      <h2 class="band-title">Reachable nodes — right now</h2>
+      <div class="band-cells">
+        <div class="kpi"><span class="value" id="kpi-now-total">—</span><span class="label">Total</span></div>
+        <div class="kpi"><span class="value" id="kpi-now-clearnet">—</span><span class="label">Clearnet</span></div>
+        <div class="kpi"><span class="value" id="kpi-now-tor">—</span><span class="label">Tor</span></div>
+        <div class="kpi"><span class="value" id="kpi-now-i2p">—</span><span class="label">I2P</span></div>
+      </div>
+    </div>
+    <div class="band">
+      <h2 class="band-title">Unique estimate (1/N dedup) — now
+        <a class="band-link" href="/research#unique">method</a></h2>
+      <div class="band-cells">
+        <div class="kpi"><span class="value" id="kpi-uniq-total">—</span><span class="label">Total</span></div>
+        <div class="kpi"><span class="value" id="kpi-uniq-clearnet">—</span><span class="label">Clearnet</span></div>
+        <div class="kpi"><span class="value" id="kpi-uniq-tor">—</span><span class="label">Tor</span></div>
+        <div class="kpi"><span class="value" id="kpi-uniq-i2p">—</span><span class="label">I2P</span></div>
+      </div>
+    </div>
+    <div class="band">
+      <h2 class="band-title" id="band-window-title">Unique over 8 days</h2>
+      <div class="band-cells">
+        <div class="kpi"><span class="value" id="kpi-win-total">—</span><span class="label">Total</span></div>
+        <div class="kpi"><span class="value" id="kpi-win-clearnet">—</span><span class="label">Clearnet</span></div>
+        <div class="kpi"><span class="value" id="kpi-win-tor">—</span><span class="label">Tor</span></div>
+        <div class="kpi"><span class="value" id="kpi-win-i2p">—</span><span class="label">I2P</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="kpi-side">
+    <div class="kpi"><span class="value" id="kpi-countries">—</span><span class="label">Countries</span></div>
+    <div class="kpi"><span class="value" id="kpi-asns">—</span><span class="label">Distinct ASNs</span></div>
+    <div class="kpi"><span class="value" id="kpi-height">—</span><span class="label">Median height</span></div>
+    <a class="services-strip" id="services-strip" href="/research#services" hidden></a>
+  </div>
 </section>
-
-<p class="window-note" id="window-note" hidden></p>
 
 <section class="grid">
   <div class="panel map-panel">
