@@ -78,7 +78,7 @@
 - [x] [Review][Patch] Agregado como mediana real de ECDFs (no pooled sesgado) + label del eje y [queries/block_propagation.py:164, static/research.js]
 - [x] [Review][Patch] Semántica BIP159: "PRUNED" = LIMITED sin NETWORK, métrica derivada [queries/services.py, static/app.js]
 - [x] [Review][Patch] Collector exit 1 cuando fallan las tres secciones [collector.py:49]
-- [ ] [Review][Patch] TimeoutStartSec + Wants=network-online.target en la unit [deploy/alt-bitnodes-collector.service]
+- [x] [Review][Patch] TimeoutStartSec + Wants=network-online.target en la unit [deploy/alt-bitnodes-collector.service]
 - [x] [Review][Patch] Robustez de parseo: JSONDecodeError en snapshot corrupto (×3 sitios), gossip JSON escalar, validación de shape en loaders y entries de serie [queries/services.py, queries/unique_nodes.py, queries/block_propagation.py]
 - [ ] [Review][Patch] Podar .json.tmp huérfanos [queries/block_propagation.py:146]
 - [ ] [Review][Patch] Normalizar hash a lowercase en load_block [queries/block_propagation.py:228]

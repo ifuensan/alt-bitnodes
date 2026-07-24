@@ -1,5 +1,8 @@
 [Unit]
 Description=alt-bitnodes latent-data collector (propagation + services + unique)
+# Wants pulls in network-online.target; After alone only orders against it
+# if something else already requires it (it wouldn't here).
+Wants=network-online.target
 After=network-online.target redis-server.service
 
 [Service]
@@ -10,6 +13,11 @@ WorkingDirectory=__DASHBOARD_DIR__
 Environment=BITNODES_EXPORT_DIR=__EXPORT_DIR__
 # Read-only Redis sweeps + snapshot reads; yield to the crawler.
 Nice=15
+# oneshot defaults to no start timeout: a hung Redis connection would
+# leave the unit "activating" forever and every later timer tick becomes
+# a no-op. Bound it well under the 600s timer interval so a hung run is
+# killed and the next tick starts fresh.
+TimeoutStartSec=300
 ExecStart=__DASHBOARD_DIR__/venv/bin/python collector.py
 
 NoNewPrivileges=yes
