@@ -5,6 +5,12 @@ sections — block propagation (binv:* zsets), the daily services adoption
 series, and the 1/N unique-node estimate. Each section runs under its own
 try/except so one failure never starves the others (lesson from the
 2026-07-22 cron-greenlet postmortem).
+
+Exit code: 0 while at least one section succeeds (partial failures are
+logged but degrade gracefully, so they must not mark the oneshot unit
+failed on every tick). A total failure — all three sections raised, i.e.
+Redis down or the export dir broken — exits non-zero so systemd surfaces
+it (`systemctl status`, `OnFailure=`).
 """
 
 import json
@@ -18,6 +24,7 @@ from queries.unique_nodes import write_unique_estimate
 
 def run() -> dict:
     results: dict = {}
+    failed: list[str] = []
 
     try:
         results["propagation"] = collect_propagation()
@@ -25,6 +32,7 @@ def run() -> dict:
     except Exception:
         logging.exception("propagation collection failed")
         results["propagation"] = None
+        failed.append("propagation")
 
     try:
         series = refresh_services_series()
@@ -33,6 +41,7 @@ def run() -> dict:
     except Exception:
         logging.exception("services series refresh failed")
         results["services_days"] = None
+        failed.append("services")
 
     try:
         est = write_unique_estimate()
@@ -42,12 +51,25 @@ def run() -> dict:
     except Exception:
         logging.exception("unique estimate failed")
         results["unique_estimate"] = None
+        failed.append("unique")
 
+    results["failed"] = failed
     return results
 
 
-if __name__ == "__main__":
+SECTION_COUNT = 3
+
+
+def main() -> int:
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
-    print(json.dumps(run()))
-    sys.exit(0)
+    results = run()
+    print(json.dumps(results))
+    if len(results["failed"]) == SECTION_COUNT:
+        logging.error("all %d collector sections failed", SECTION_COUNT)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
