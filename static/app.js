@@ -289,7 +289,9 @@ async function loadWindowStats() {
     document.getElementById("kpi-win-tor").textContent = fmt.format(w.tor);
     document.getElementById("kpi-win-i2p").textContent = fmt.format(w.i2p);
   } catch (e) {
-    /* no windowed data yet — the band keeps its em-dashes */
+    // Missing data leaves the band's em-dashes; a real error (e.g. a
+    // renamed element id) must still surface, not hide as "no data".
+    console.error("loadWindowStats:", e);
   }
 }
 
@@ -304,7 +306,7 @@ async function loadUniqueBand() {
     document.getElementById("kpi-uniq-tor").textContent = fmt.format(est.tor);
     document.getElementById("kpi-uniq-i2p").textContent = fmt.format(est.i2p);
   } catch (e) {
-    /* collector not run yet */
+    console.error("loadUniqueBand:", e);
   }
 }
 
@@ -332,7 +334,7 @@ async function loadServicesStrip() {
     strip.textContent = parts.join(" · ") + " →";
     strip.hidden = false;
   } catch (e) {
-    /* collector not run yet — strip stays hidden */
+    console.error("loadServicesStrip:", e);
   }
 }
 

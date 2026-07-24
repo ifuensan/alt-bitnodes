@@ -270,6 +270,10 @@ tr:hover td { background: var(--surface-2); }
   border-left: 2px solid var(--primary);
 }
 #prop-blocks td.hash { color: var(--text-dim); }
+#prop-blocks .subhead-row th {
+  top: 0; font-size: 9px; font-weight: 400;
+  letter-spacing: 0.4px; color: var(--dim); text-align: right;
+}
 #prop-aggregate, #services-toggle {
   background: var(--surface-2); color: var(--text-dim);
   border: 1px solid var(--border);

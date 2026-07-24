@@ -103,12 +103,17 @@ function renderBlockTable(blocks) {
   for (const b of blocks) {
     const tr = document.createElement("tr");
     tr.dataset.hash = b.hash;
-    const p50 = (net) => b.networks?.[net]?.p50 ?? "—";
+    // "p50 ∕ p90" per class; an em-dash when that class had no announcers.
+    const pct = (net) => {
+      const s = b.networks?.[net];
+      if (!s || s.count === 0) return "—";
+      return `${s.p50 ?? "—"} ∕ ${s.p90 ?? "—"}`;
+    };
     const cells = [
       b.height_estimate != null ? fmt.format(b.height_estimate) : "—",
       shortHash(b.hash),
       fmt.format(b.count),
-      String(p50("ipv4")), String(p50("tor")), String(p50("i2p")),
+      pct("ipv4"), pct("ipv6"), pct("tor"), pct("i2p"),
     ];
     for (const [i, text] of cells.entries()) {
       const td = document.createElement("td");
@@ -179,21 +184,25 @@ function renderServicesBars() {
   const colors = networkColors();
   const latest = servicesPayload.latest;
   const flags = [...latest.flags].sort((a, b) => b.pct - a.pct);
+  const total = latest.total || 1;
   let chart;
   if (!servicesByNetwork) {
     const data = flags.map((f) => ({ flag: f.flag, pct: f.pct, count: f.count, bit: f.bit }));
     if (latest.other.count) {
       data.push({ flag: "other bits", pct: latest.other.pct, count: latest.other.count, bit: null });
     }
+    // Explicit y domain (adoption desc, `other bits` pinned last). A
+    // barX `sort` would re-rank purely by pct and float `other` up.
+    const yDomain = data.map((d) => d.flag);
     chart = Plot.plot({
       width: el.clientWidth || 900,
       height: data.length * 34 + 50,
       marginLeft: 190,
       style: { background: "transparent", color: tok.text, fontSize: "12px", fontFamily: MONO_FONT_STACK },
       x: { domain: [0, 100], grid: true, label: "% of reachable nodes" },
-      y: { label: null },
+      y: { domain: yDomain, label: null },
       marks: [
-        Plot.barX(data, { x: "pct", y: "flag", fill: tok.primary, sort: { y: "x", reverse: true } }),
+        Plot.barX(data, { x: "pct", y: "flag", fill: tok.primary }),
         Plot.tip(data, Plot.pointerY({
           x: "pct", y: "flag",
           title: (d) => `${d.flag}${d.bit != null ? ` (bit ${d.bit})` : ""}\n${fmt.format(d.count)} nodes — ${d.pct}%`,
@@ -202,11 +211,14 @@ function renderServicesBars() {
       ],
     });
   } else {
-    const total = latest.total || 1;
     const data = [];
     for (const f of flags) {
       for (const net of NETWORKS) {
-        data.push({ flag: f.flag, net, count: f.by_network[net] });
+        data.push({
+          flag: f.flag, bit: f.bit, net,
+          count: f.by_network[net],
+          pct: Math.round((1000 * f.by_network[net]) / total) / 10,
+        });
       }
     }
     chart = Plot.plot({
@@ -214,15 +226,15 @@ function renderServicesBars() {
       height: flags.length * 90 + 60,
       marginLeft: 190,
       style: { background: "transparent", color: tok.text, fontSize: "12px", fontFamily: MONO_FONT_STACK },
-      x: { grid: true, label: "nodes" },
+      x: { grid: true, label: "% of reachable nodes" },
       y: { label: null },
-      fy: { label: null },
+      fy: { domain: flags.map((f) => f.flag), label: null },
       color: { domain: NETWORKS, range: NETWORKS.map((n) => colors[n]), legend: true },
       marks: [
-        Plot.barX(data, { x: "count", y: "net", fy: "flag", fill: "net" }),
+        Plot.barX(data, { x: "pct", y: "net", fy: "flag", fill: "net" }),
         Plot.tip(data, Plot.pointer({
-          x: "count", y: "net", fy: "flag",
-          title: (d) => `${d.flag} — ${d.net}\n${fmt.format(d.count)} nodes (${(100 * d.count / total).toFixed(1)}% of all)`,
+          x: "pct", y: "net", fy: "flag",
+          title: (d) => `${d.flag} (bit ${d.bit}) — ${d.net}\n${fmt.format(d.count)} nodes — ${d.pct}% of all`,
           fill: tok.surface, stroke: tok.border,
         })),
       ],
@@ -240,6 +252,8 @@ function renderServicesHistory() {
     return;
   }
   const tok = themeTokens();
+  const bitByFlag = Object.fromEntries(
+    (servicesPayload.latest?.flags || []).map((f) => [f.flag, f.bit]));
   const data = [];
   for (const d of days) {
     for (const [flag, pct] of Object.entries(d.flags)) {
@@ -257,7 +271,11 @@ function renderServicesHistory() {
       Plot.line(data, { x: "date", y: "pct", fy: "flag", stroke: tok.primary, strokeWidth: 1.5 }),
       Plot.tip(data, Plot.pointer({
         x: "date", y: "pct", fy: "flag",
-        title: (d) => `${d.flag}\n${d.date.toISOString().slice(0, 10)} — ${d.pct}%`,
+        title: (d) => {
+          const bit = bitByFlag[d.flag];
+          const label = bit != null ? `${d.flag} (bit ${bit})` : d.flag;
+          return `${label}\n${d.date.toISOString().slice(0, 10)} — ${d.pct}%`;
+        },
         fill: tok.surface, stroke: tok.border,
       })),
     ],
@@ -296,23 +314,27 @@ function renderComposition() {
   const tok = themeTokens();
   const colors = networkColors();
   const c = uniquePayload.composition;
-  const data = [
+  // Keep zero categories so the legend always lists all three (a node
+  // advertising 1/2/3+ network types) — the weighting denominator is
+  // clearer when the whole scale is present, even at 0%.
+  const raw = [
     { k: "1 network type", v: c.n1, color: colors.ipv4 },
     { k: "2 network types", v: c.n2, color: colors.tor },
     { k: "3+ network types", v: c.n3plus, color: colors.i2p },
-  ].filter((d) => d.v > 0);
-  const total = data.reduce((s, d) => s + d.v, 0) || 1;
+  ];
+  const total = raw.reduce((s, d) => s + d.v, 0) || 1;
+  const data = raw.map((d) => ({ ...d, pct: Math.round((1000 * d.v) / total) / 10 }));
   const chart = Plot.plot({
     width: el.clientWidth || 900,
     height: 90,
     style: { background: "transparent", color: tok.text, fontSize: "12px", fontFamily: MONO_FONT_STACK },
-    x: { label: "reachable addresses", grid: true },
+    x: { label: "% of reachable addresses", grid: true },
     color: { domain: data.map((d) => d.k), range: data.map((d) => d.color), legend: true },
     marks: [
-      Plot.barX(data, { x: "v", fill: "k" }),
+      Plot.barX(data, { x: "pct", fill: "k" }),
       Plot.tip(data, Plot.pointerX(Plot.stackX({
-        x: "v",
-        title: (d) => `${d.k}\n${fmt.format(d.v)} addresses (${(100 * d.v / total).toFixed(1)}%)`,
+        x: "pct",
+        title: (d) => `${d.k}\n${d.pct}% — ${fmt.format(d.v)} addresses`,
         fill: tok.surface, stroke: tok.border,
       }))),
     ],
