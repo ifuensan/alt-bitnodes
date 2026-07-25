@@ -74,9 +74,11 @@ breakdown tiles already use).
 1. **Block propagation — ECDF ("what fraction of announcers had the block
    after t ms")**
    - Aggregate view (default): x = ms since the block's first observed
-     announcement (log scale, 100 ms – 5 min), y = cumulative fraction of
-     that block's announcers, one `Plot.line` (step) per network class,
-     median curve over the last N collected blocks.
+     announcement (log scale; shipped with an auto domain rather than a
+     fixed 100 ms – 5 min window, so sparse data still fills the axis),
+     y = cumulative fraction of that block's announcers, one `Plot.line`
+     (step) per network class, median curve over the last N collected
+     blocks.
    - Per-block view: same encoding for a single block selected from a
      compact table of recent blocks (height, short hash, announcer count,
      p50/p90 per class). Table rows follow the dense-table type scale.
@@ -106,7 +108,9 @@ breakdown tiles already use).
 ### D3 — Propagation collection: timer job persisting per-block JSON
 
 A `queries/block_propagation.py` collector (invoked by a new
-`alt-bitnodes-propagation` systemd service+timer, every 10 min) scans
+`alt-bitnodes-collector` systemd service+timer — shipped under that name,
+not `alt-bitnodes-propagation`, since one timer runs all three sections —
+every 10 min) scans
 `binv:*`, skips blocks already collected or still "hot" (first announcement
 < 30 min ago, still accumulating), computes per-class percentiles and ECDF
 points, and appends one JSON document per block under

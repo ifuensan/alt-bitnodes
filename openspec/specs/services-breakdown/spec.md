@@ -67,7 +67,8 @@ public `GET /api/v1/stats/services/` endpoint.
   (total and per network class) and the daily adoption series per flag
 
 ### Requirement: Main page shows a compact services strip
-The main page SHALL show a compact one-line services strip below the KPI
+The main page SHALL show a compact one-line services strip in the side
+cluster beside the KPI
 matrix with the adoption percentages of the headline flags (at minimum
 NODE_P2P_V2, NODE_COMPACT_FILTERS, NODE_NETWORK_LIMITED), linking to the
 full services section on `/research`. The strip SHALL contain numbers and

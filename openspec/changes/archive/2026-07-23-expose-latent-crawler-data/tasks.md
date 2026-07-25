@@ -89,8 +89,8 @@
 - [x] [Review][Patch] Composición en % con categorías cero visibles [static/research.js]
 - [x] [Review][Patch] lru_cache en services_breakdown + clear en conftest [queries/services.py]
 - [x] [Review][Patch] console.error en catches silenciosos del frontend [static/app.js]
-- [ ] [Review][Patch] Imports muertos en test_api_latent [tests/test_api_latent.py]
-- [ ] [Review][Patch] Sincronizar artefactos con lo implementado: nav 3 entradas, strip en side cluster, height_estimate, color mapping propio, x-domain auto, nombre de unit collector [openspec specs/design]
+- [x] [Review][Patch] Imports muertos en test_api_latent [tests/test_api_latent.py]
+- [x] [Review][Patch] Sincronizar artefactos con lo implementado: nav 3 entradas, strip en side cluster, height_estimate, color mapping propio, x-domain auto, nombre de unit collector [openspec specs/design]
 - [x] [Review][Defer] Crecimiento sin límite de la serie diaria (~40KB/año) — deferred, coste trivial
 - [x] [Review][Defer] Re-parseo de ~4.3k ficheros por corrida a retención completa — deferred, optimización
 - [x] [Review][Defer] /api/v1/stats/window sin trailing slash — deferred, pre-existente

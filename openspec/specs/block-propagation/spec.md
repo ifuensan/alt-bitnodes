@@ -48,8 +48,9 @@ crawler's first observation.
 #### Scenario: Aggregate response
 - **WHEN** a client requests `GET /api/v1/stats/propagation/`
 - **THEN** the response contains an aggregate ECDF per network class over
-  the most recent collected blocks and a list of those blocks with height,
-  hash, announcer count, and per-class p50/p90
+  the most recent collected blocks and a list of those blocks with
+  `height_estimate` (nullable — inferred from the first snapshot after the
+  block appeared), hash, announcer count, and per-class p50/p90
 
 #### Scenario: No collected data yet
 - **WHEN** no propagation files exist
@@ -60,10 +61,11 @@ The research page (`/research`) SHALL render the block-propagation
 section using Observable
 Plot: an ECDF step-line chart with x = milliseconds since first observed
 announcement on a log scale, y = cumulative fraction of announcers, one
-line per network class using the same class-color mapping as the network
-breakdown tiles, plus a dense table of recent blocks. Selecting a block in
-the table SHALL switch the chart from the aggregate view to that block.
-All colors SHALL come from design-system tokens.
+line per network class using a fixed class-color mapping (ipv4, ipv6, tor,
+i2p — resolved from design-system tokens in the research page's JS), plus
+a dense table of recent blocks showing p50/p90 per class. Selecting a
+block in the table SHALL switch the chart from the aggregate view to that
+block. All colors SHALL come from design-system tokens.
 
 #### Scenario: Default aggregate view
 - **WHEN** the research page loads and propagation data is available

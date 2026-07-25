@@ -34,7 +34,8 @@ empty dataset does not block the others.
 
 ### Requirement: Header navigation links the two pages
 Both the main page and the research page SHALL show a header navigation
-with two entries (overview and research), styled from design-system
+with entries for overview and research (and the pre-existing archive
+page), styled from design-system
 tokens, with the active page visually distinguished. Compact elements on
 the main page (services strip, unique-estimate band) SHALL link to their
 expanded sections on `/research`.

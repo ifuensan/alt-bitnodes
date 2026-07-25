@@ -1,12 +1,9 @@
 """Endpoints for the latent-crawler-data features: propagation, services,
 unique-nodes. Empty datasets are 200s with empty payloads, never errors."""
 
-import json
-
 from fastapi.testclient import TestClient
 
 import app as app_module
-import queries.services as sb
 from queries import block_propagation as bp
 from queries import unique_nodes as un
 from tests.conftest import make_row
