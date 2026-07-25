@@ -13,6 +13,7 @@ metric (NODE_NETWORK_LIMITED set, NODE_NETWORK clear) is the honest one.
 
 import datetime as dt
 import json
+from functools import lru_cache
 from pathlib import Path
 
 from queries.config import SERVICES_SERIES_FILE
@@ -50,6 +51,10 @@ def _pct(count: int, total: int) -> float:
     return round(100.0 * count / total, 2) if total else 0.0
 
 
+# Snapshots are immutable (timestamp-named, never rewritten), so a decode
+# result is stable per timestamp — cache it, as the API may re-request the
+# latest snapshot's breakdown on every /api/services hit.
+@lru_cache(maxsize=8)
 def services_breakdown(timestamp: int) -> dict:
     """Per-flag adoption counts for one snapshot, total and per network."""
     rows = load_snapshot(timestamp)

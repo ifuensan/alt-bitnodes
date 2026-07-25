@@ -92,14 +92,20 @@ def compute_unique_estimate(redis_conn=None, timestamp: int = None) -> dict:
         else:
             composition["n3plus"] += 1
 
+    # Round the bands, then derive the total from them so the three
+    # per-class figures always sum to `estimate` (rounding each of four
+    # numbers independently would let 0.3+0.3+0.3 sit beside a 1.0 total).
+    clearnet = round(bands["clearnet"], 1)
+    tor = round(bands["tor"], 1)
+    i2p = round(bands["i2p"], 1)
     return {
         "generated_at": int(time.time()),
         "snapshot": ts,
         "reachable": len(rows),
-        "estimate": round(total, 1),
-        "clearnet": round(bands["clearnet"], 1),
-        "tor": round(bands["tor"], 1),
-        "i2p": round(bands["i2p"], 1),
+        "estimate": round(clearnet + tor + i2p, 1),
+        "clearnet": clearnet,
+        "tor": tor,
+        "i2p": i2p,
         "composition": composition,
         "method": METHOD,
     }

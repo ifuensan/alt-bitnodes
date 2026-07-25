@@ -103,6 +103,22 @@ def test_load_block_validates_hash(data_dir):
     assert bp.load_block(HASH_A, root=root) is None  # not collected
 
 
+def test_load_block_accepts_uppercase_hash(data_dir):
+    base = 1_000_000_000.0
+    root = data_dir / "propagation"
+    fake = FakeInvRedis({f"binv:{HASH_A}": _zset(base, [("1.2.3.4", 0)])})
+    bp.collect_propagation(redis_conn=fake, root=root, now_ms=base + bp.HOT_MS + 1)
+    assert bp.load_block(HASH_A.upper(), root=root)["hash"] == HASH_A
+
+
+def test_prune_removes_orphaned_tmp_files(data_dir):
+    root = data_dir / "propagation"
+    root.mkdir(parents=True, exist_ok=True)
+    (root / f"{HASH_A}.json.tmp").write_text("{partial")
+    bp.collect_propagation(redis_conn=FakeInvRedis({}), root=root, now_ms=1.0)
+    assert not (root / f"{HASH_A}.json.tmp").exists()
+
+
 def test_empty_state(data_dir):
     agg = bp.load_propagation(root=data_dir / "propagation")
     assert agg["blocks"] == [] and agg["generated_at"] is None

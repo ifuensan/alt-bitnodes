@@ -22,7 +22,7 @@ os.environ["BITNODES_WINDOW_STATS_FILE"] = str(_DATA_DIR / "window-stats.json")
 
 import pytest
 
-from queries import config, nodes, snapshots
+from queries import config, nodes, services, snapshots
 
 
 def make_row(**overrides) -> list:
@@ -83,6 +83,7 @@ def _clean_state(export_dir):
         p.unlink() if p.is_file() else p.rmdir()
     snapshots.load_snapshot.cache_clear()
     snapshots.snapshot_meta.cache_clear()
+    services.services_breakdown.cache_clear()
     snapshots._addresses_state["last_ts"] = 0
     snapshots._addresses_state["set"] = set()
     nodes._opendata_cache["ts"] = 0.0

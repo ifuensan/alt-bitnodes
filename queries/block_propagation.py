@@ -166,6 +166,12 @@ def _prune(root: Path, now_ms: float) -> int:
         if doc.get("first_ms", 0) < cutoff:
             p.unlink(missing_ok=True)
             pruned += 1
+    # Orphaned tmp files from a process killed between write and rename:
+    # glob("*.json") never matches them, so they would accumulate forever.
+    # The collector is single-instance (systemd oneshot), so no *.json.tmp
+    # is ever live during a prune.
+    for p in root.glob("*.json.tmp"):
+        p.unlink(missing_ok=True)
     return pruned
 
 
@@ -265,8 +271,10 @@ def load_propagation(root: Path = None) -> dict:
 
 
 def load_block(block_hash: str, root: Path = None) -> dict | None:
-    """One collected block document, or None. Hash is validated (hex64)."""
-    if not _HASH_RE.match(block_hash or ""):
+    """One collected block document, or None. Hash is validated (hex64);
+    accepted case-insensitively (explorers display uppercase hashes)."""
+    block_hash = (block_hash or "").lower()
+    if not _HASH_RE.match(block_hash):
         return None
     root = root or PROPAGATION_DIR
     path = root / f"{block_hash}.json"

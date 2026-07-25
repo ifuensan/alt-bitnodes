@@ -65,6 +65,28 @@ def test_malformed_gossip_counts_as_n1(write_snapshot):
         assert est["composition"]["n1"] == 1
 
 
+def test_per_class_sums_equal_total_after_rounding(write_snapshot):
+    # Three N=3 addresses, one per class -> each band weight 1/3. Rounded
+    # independently they'd be 0.3+0.3+0.3=0.9 beside a 1.0 total; the fix
+    # derives the total from the rounded bands so they always match.
+    write_snapshot(1000, [
+        make_row(address="1.2.3.4"),
+        make_row(address="a.onion"),
+        make_row(address="b.b32.i2p"),
+    ])
+    tri = _gossip("9.9.9.9", "z.onion", "w.b32.i2p")  # ipv4+tor+i2p -> N=3
+    fake = FakePeerRedis({
+        "peer:1.2.3.4-8333": tri,
+        "peer:a.onion-8333": tri,
+        "peer:b.b32.i2p-8333": tri,
+    })
+    est = un.compute_unique_estimate(redis_conn=fake)
+    # Consistent at display precision (1 decimal); the bare float sum
+    # carries an IEEE-754 artifact (0.3+0.3+0.3 = 0.9000…1).
+    assert round(est["clearnet"] + est["tor"] + est["i2p"], 1) == est["estimate"]
+    assert est["estimate"] == 0.9  # not the 1.0 an independent round would give
+
+
 def test_corrupt_snapshot_degrades_to_empty(export_dir):
     (export_dir / "1000.json").write_text("{truncated")
     est = un.compute_unique_estimate(redis_conn=FakePeerRedis({}))
