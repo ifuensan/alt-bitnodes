@@ -1,7 +1,11 @@
 # Draft — Delving Bitcoin post
 
 Status: draft 2026-07-23, peak numbers filled from the 2026-07-22/23
-post-UseEntryGuards plateau. Ready for author review. Target venue:
+post-UseEntryGuards plateau; stage 9 (egress economics + cost-anomaly
+false positive) added 2026-08-01. Ready for author review. Target venue:
+Figures for stage 9 in `docs/delving-assets/`: `chart_egress_daily.png`
+(daily GB with stage annotations), `chart_egress_composition.png`
+(I2P/Tor/Bitcoin split), `chart_cost_per_nodes.png` ($/day vs nodes).
 https://delvingbitcoin.org, category "Implementation" or "Research".
 
 ---
@@ -121,6 +125,51 @@ plateaued ~13 hours later.
   count bitnod.es reports (~10.6k), which says less about who is right
   and more about how much measurement infrastructure shapes the number.
 
+### Stage 9 — the egress bill is a ceiling too (and your own cloud can't tell a crawler from malware)
+
+Two weeks after the guards fix, AWS Cost Anomaly Detection flagged the
+instance: data-transfer spend **2,307% over expected**. An
+incident-response pass read the evidence — constant 330–350 GB/day
+outbound, 24/7, ramping since mid-July, "compatible with a compromised
+instance used as a proxy/relay" — and quarantined the box, taking the
+dashboard down for ~30 minutes. It was a false positive: the "malware"
+was the crawler. The misdiagnosis is the interesting part: **at this
+scale, a Tor+I2P crawler's traffic profile is indistinguishable from a
+compromised relay, even to its own operator.**
+
+Measuring where the egress actually goes (per-process TCP `bytes_sent`
+deltas over 60 s windows, cross-checked against i2pd's router console)
+settled it:
+
+| Component | Share of ~356 GB/day | What it actually is |
+|---|---|---|
+| Bitcoin protocol, clearnet | **~0.1%** | version/verack/ping/pong to ~6.4k IPv4/IPv6 nodes |
+| Tor | ~45% | ~1,000 fresh TLS connections/min — the direct price of `UseEntryGuards 0` (stage 8): every circuit build now opens a new connection to a random relay |
+| I2P | ~55% | tunnel building at 67% success rate, leaseset lookups against ~1.5k floodfills, NetDb maintenance, SSU2 — with **zero transit** carried for other routers |
+
+The Bitcoin traffic itself is a rounding error; **over 99% of the bill
+is overlay machinery.** And each stage left its signature in the daily
+cost curve:
+
+- **$0.30/day** — pre-scaling baseline (~4k nodes)
+- **$1.60/day** — full 24k socket budget, overlays still small
+  (stage 4: 11.6k nodes for pocket change — clearnet is cheap to see)
+- **$9–15/day** — I2P handshakes actually working + Tor pool at 9
+  daemons
+- **$22/day** — from the exact day `UseEntryGuards 0` shipped
+  (stage 8's plateau, ~22k nodes)
+
+At AWS's ~$0.09/GB that is **~$660/month of data transfer** for a
+research observatory. This is a hyperscaler phenomenon, not a cloud
+phenomenon: the same ~10.7 TB/month is included in a €40 Hetzner box,
+unmetered on an OVH one, and a non-event on self-hosted hardware
+(~33 Mbit/s sustained upload). So the thesis gains a corollary: the
+reachable node count is bounded by your infrastructure, and your
+infrastructure is bounded by egress economics. A number as unglamorous
+as your provider's data-transfer rate ends up shaping how much of the
+network you can afford to see. This instance is migrating to
+self-hosted Proxmox.
+
 ## What this means for node-count numbers
 
 - **Instantaneous vs windowed counts measure different things.** Tor
@@ -136,6 +185,12 @@ plateaued ~13 hours later.
 - **The interesting metric is the derivative.** If your count plateaus,
   before concluding "that's the network", check composition (stage 3),
   socket budget (stage 4), and upstream throttling (stage 8).
+- **Overlay visibility has a price tag, and it is not paid in Bitcoin
+  bytes.** Seeing the clearnet is nearly free; seeing Tor and I2P costs
+  two orders of magnitude more traffic in circuit and tunnel machinery
+  (stage 9). On metered-egress providers, tracker completeness is
+  partly a budget decision — one more reason cross-tracker numbers
+  diverge.
 
 Happy to share configs, the fork's diffs, or raw snapshots — everything
 is public at the links above.

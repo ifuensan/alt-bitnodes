@@ -7,6 +7,72 @@ see `_bmad-output/planning-artifacts/`.
 
 ## Operational
 
+### Migrate production off AWS to self-hosted Proxmox
+
+**Status**: Decided 2026-08-01. Driver: egress cost — the scaled
+crawler pushes ~356 GB/day (>99% Tor/I2P overlay machinery, ~0.1%
+Bitcoin protocol), ~$22/day at AWS transfer rates (~$660/month). See
+`docs/postmortems/2026-08-01-egress-cost-anomaly-false-positive.md`
+and stage 9 of `docs/delving-draft-stages.md`.
+
+**2026-08-01, cost contained**: the traffic generators are STOPPED and
+disabled on the EC2 host (`bitnodes.service`, `i2pd`, `tor@*`, and
+`export-prune.timer` — frozen so the 90-day retention doesn't erode the
+snapshot history before the move). Dashboard/API/MCP stay up serving
+the last snapshot (~14.4k nodes); egress measured ~8 KB/s afterwards
+(≈ $0/day). **Caution**: a non-docs push to main triggers the deploy
+and `install.sh` may re-enable the crawler — avoid deploys until the
+migration, or guard `install.sh` first.
+
+**Provider cost comparison (2026-08-01)**: AWS resumed ≈ €600-780/mo.
+Hetzner CAX31 (8 ARM vCPU/16GB, 20TB included) ≈ €16-21/mo, CAX41
+(16/32GB) ≈ €31-41/mo — caveat: Hetzner's netscan/abuse detection may
+flag a crawler opening connections to thousands of IPs. OVH VPS
+(8 vCore, unmetered) ≈ €25-35/mo. Oracle free tier no longer viable
+(cut to 2 OCPU/12GB in June 2026). Second home fiber line, separate
+ONT/provider, dedicated to the crawler: Finetwork 1Gb €25/mo (own
+network), O2 €31/mo (Movistar network, no permanence) — plus own
+router/OPNsense (€0, VM), full isolation from the household line,
+unmetered, no cloud AUP risk; needs UPS + DDNS/tunnel for the
+dashboard origin. Both paths cut the bill >95%.
+
+**Home-router NAT validation (2026-08-01)**: Digi's Zyxel (MT7988)
+rate-limits connection bursts >~100/s (SYN-flood protection; the real
+crawler opens ~17/s — compatible), accumulates cleanly to ~6.5k
+concurrent sessions, but somewhere between ~7k and 10k held sessions
+**the whole household degrades** (new connections from any device fail;
+instant recovery on release). Verdict: the 40k-connection crawler
+profile does not fit behind the stock Digi router — plan for ONT
+bridge + own router (OPNsense VM on Proxmox, high conntrack) and
+likely a public IP from Digi, then re-test. Fallback: a detuned
+crawler (~5k sessions).
+
+Notes for the migration:
+- No urgency: compute is prepaid (all-upfront Savings Plan until
+  2026-11-10); data transfer is the only marginal AWS cost, and it
+  stops the moment the crawler moves.
+- Bandwidth budget on the new host: ~33 Mbit/s *sustained* upload.
+  Validated 2026-08-01 from the home LAN (Digi fiber, Madrid):
+  **573 Mbit/s** measured upload to Cloudflare, latency under full
+  upload load 6.7 ms vs 6.3 ms baseline (no bufferbloat). The crawler
+  would use ~6% of uplink. Remaining risks to validate on-site: home
+  router NAT/conntrack under ~40k concurrent flows + ~1k new
+  connections/min (consider ONT bridge + own router/OPNsense, or raise
+  `nf_conntrack_max`); inbound path for the dashboard origin (Digi may
+  CGNAT — a Cloudflare Tunnel sidesteps it entirely; the crawler
+  itself is outbound-only and unaffected); Digi AUP on ~11 TB/month
+  sustained upload (no known caps).
+- Current instance is ARM (c7g/Graviton); the stack (Python, Tor,
+  i2pd, Redis, nginx) is architecture-portable.
+- Decide the public edge: keep CloudFront pointing at the new origin
+  (free tier covers the dashboard) or drop it and terminate TLS
+  locally. `deploy/install.sh` placeholders make the host swap mostly
+  mechanical; the CloudFront prefix-list SG trick has no LAN
+  equivalent — rethink origin protection.
+- On the way out: release the idle Elastic IPs (34.206.227.120 /
+  3.219.165.64), review WAF (~$30/month) and CloudWatch dashboards
+  (~$9/month) — they die with the AWS footprint.
+
 ### CloudFront access logs to S3
 
 **Status**: Sonar hotspot `cloudformation:S6258` marked Safe
