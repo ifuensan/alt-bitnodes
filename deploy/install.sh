@@ -353,15 +353,12 @@ bootstrap_origin_secret() {
   export ORIGIN_AUTH_SECRET
 }
 
-bootstrap_mcp_token() {
-  # Bearer token required by the MCP HTTP transport (alt-bitnodes-mcp.service
-  # validates Authorization: Bearer <this>). Owned by the service user so
-  # systemd can read it without giving the file world access. Rotation:
-  # delete the file and re-run install.sh; the service will pick up the new
-  # token on its next restart.
-  local dir=/etc/alt-bitnodes
-  local file="${dir}/mcp-token"
-  install -d -m 0750 -o root -g "${INSTALL_USER}" "${dir}"
+generate_token_file() {
+  # Write a random token to $1 if absent. Owned by the service user so systemd
+  # can read it without giving the file world access. Rotation: delete the file
+  # and re-run install.sh; the service picks it up on its next restart.
+  local file="$1" label="$2"
+  install -d -m 0750 -o root -g "${INSTALL_USER}" /etc/alt-bitnodes
   if [[ ! -f "${file}" ]]; then
     log "Generating ${file}"
     umask 077
@@ -369,10 +366,24 @@ bootstrap_mcp_token() {
     openssl rand -base64 32 | tr -d '\n=' | tr '/+' '_-' > "${file}"
     chmod 0640 "${file}"
     chown root:"${INSTALL_USER}" "${file}"
-    echo "    MCP bearer token written (chmod 0640 root:${INSTALL_USER})"
+    echo "    ${label} written (chmod 0640 root:${INSTALL_USER})"
   else
     log "${file} already present; leaving as-is"
   fi
+}
+
+bootstrap_mcp_token() {
+  # Bearer token required by the MCP HTTP transport (alt-bitnodes-mcp.service
+  # validates Authorization: Bearer <this>).
+  generate_token_file /etc/alt-bitnodes/mcp-token "MCP bearer token"
+}
+
+bootstrap_research_token() {
+  # Gate token for /research. The page holds exploratory charts that are not
+  # maintained to the standard of the public dashboard, so it is served only
+  # to a caller presenting ?token=<this>. Without this file the page stays
+  # closed (the gate fails closed by design).
+  generate_token_file /etc/alt-bitnodes/research-token "Research gate token"
 }
 
 configure_nginx() {
@@ -426,6 +437,7 @@ main() {
   setup_dashboard
   bootstrap_origin_secret
   bootstrap_mcp_token
+  bootstrap_research_token
   install_systemd_units
   configure_nginx
   install_cloudwatch_agent

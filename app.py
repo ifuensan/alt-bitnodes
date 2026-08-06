@@ -1,9 +1,11 @@
 import logging
 from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Cookie, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+
+import research_gate
 
 from queries import (
     EXPORT_DIR,
@@ -81,9 +83,24 @@ def archive_page() -> FileResponse:
     return FileResponse("templates/archive.html", headers=_HTML_NO_CACHE)
 
 
-@app.get("/research")
-def research_page() -> FileResponse:
-    return FileResponse("templates/research.html", headers=_HTML_NO_CACHE)
+@app.get("/research", responses={404: {"description": "Not found"}})
+def research_page(
+    token: Annotated[str | None, Query()] = None,
+    research_token: Annotated[str | None, Cookie()] = None,
+) -> FileResponse:
+    """Token-gated: exploratory charts, not part of the public surface."""
+    expected = research_gate.load_token()
+    if research_gate.is_authorised(token, expected):
+        response = FileResponse("templates/research.html", headers=_HTML_NO_CACHE)
+        # Remember the token so deep links work without carrying the query.
+        response.set_cookie(
+            research_gate.COOKIE_NAME, token, httponly=True,
+            samesite="lax", secure=True, max_age=60 * 60 * 24 * 90,
+        )
+        return response
+    if research_gate.is_authorised(research_token, expected):
+        return FileResponse("templates/research.html", headers=_HTML_NO_CACHE)
+    raise HTTPException(status_code=404, detail="Not found")
 
 
 @app.get("/api/snapshots")

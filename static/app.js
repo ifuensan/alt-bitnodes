@@ -331,7 +331,7 @@ async function loadServicesStrip() {
     if (pruned) parts.push(`PRUNED ${pruned.pct}%`);
     if (!parts.length) return;
     const strip = document.getElementById("services-strip");
-    strip.textContent = parts.join(" · ") + " →";
+    strip.textContent = parts.join(" · ");
     strip.hidden = false;
   } catch (e) {
     console.error("loadServicesStrip:", e);
