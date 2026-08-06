@@ -25,6 +25,13 @@ property of the tracker, not of the network.** When two trackers
 disagree, the interesting question is not who is right — it's which
 bottleneck each one has not hit yet.
 
+The crawler is a fork of `ayeowch/bitnodes` — the codebase behind the
+original bitnodes.io, unmaintained upstream — which I've extended into
+its living lineage: a fourth ring (I2P, via a SAM v3 client written from
+scratch), a multi-daemon Tor pool, and the reliability work that keeps a
+pipeline this size from freezing silently. How each of those came about
+is the story below.
+
 Live instance: https://pesquisa.hacknodes.xyz (dashboard, REST API,
 MCP server). Crawler fork: https://github.com/ifuensan/bitnodes.
 
@@ -191,6 +198,26 @@ self-hosted Proxmox.
   (stage 9). On metered-egress providers, tracker completeness is
   partly a budget decision — one more reason cross-tracker numbers
   diverge.
+
+## What's in the fork
+
+For anyone who wants to reuse this rather than repeat it, these are the
+substantive changes on top of `ayeowch/bitnodes`:
+
+- **I2P as a fourth ring** — a SAM v3 client written from scratch
+  (`sam.py`, one persistent session per process, following Bitcoin
+  Core's flow), I2P branches through `crawl`/`ping`/`resolve`, and
+  destination seeding, because clearnet peers never gossip `.b32.i2p`.
+- **The I2P handshake fix** — the address serialiser classified
+  `.b32.i2p` as IPv4 because it contains dots; addrv2 now gets its 32
+  bytes and the legacy `version` field a null address, as Core does.
+  This was the actual reason I2P reported zero nodes.
+- **Multi-daemon Tor support** — multi-line `tor_proxies` so circuit
+  creation spreads across a pool instead of one saturated daemon.
+- **Pipeline reliability** — `restart()` split into batched Redis
+  pipelines instead of one multi-megabyte MULTI, plus a supervised
+  `cron_forever`, after a dead greenlet froze the crawler for 21.5 hours
+  with every process alive and every systemd unit green.
 
 Happy to share configs, the fork's diffs, or raw snapshots — everything
 is public at the links above.
