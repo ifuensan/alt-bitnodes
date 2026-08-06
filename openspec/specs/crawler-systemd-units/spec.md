@@ -39,7 +39,33 @@ MCP services SHALL still restart on every deploy.
   run script, or the unit file changed
 - **THEN** `bitnodes.service` is restarted
 
-#### Scenario: Stopped crawler is always started
-- **WHEN** `install.sh` runs and `bitnodes.service` is not active
+#### Scenario: Stopped crawler is started unless parked
+- **WHEN** `install.sh` runs and `bitnodes.service` is not active and not parked
 - **THEN** the service is (re)started regardless of the fingerprint
+
+### Requirement: Deploys respect deliberately parked units
+
+`install.sh` SHALL read `/etc/alt-bitnodes/parked-units` (one unit name per
+line, exact match) and SHALL NOT enable, start or restart any unit listed
+there. This covers the crawler, the Tor pool, i2pd and the timers. Parking
+is how running costs are cut — the crawler's egress is ~99% Tor/I2P overlay
+traffic — so a deploy that silently restarts a parked unit turns an
+unrelated push into a bill. An absent file parks nothing, so first installs
+are unaffected. Unit enablement state SHALL NOT be used to infer intent: a
+freshly installed unit also reports `disabled`.
+
+#### Scenario: Deploy leaves a parked crawler stopped
+- **WHEN** `bitnodes.service` is listed in `/etc/alt-bitnodes/parked-units`
+  and `install.sh` runs
+- **THEN** the service is neither enabled nor restarted, and the run logs
+  that it is parked
+
+#### Scenario: Parked overlays stay down
+- **WHEN** `i2pd.service` or a `tor@*.service` instance is parked
+- **THEN** `install.sh` does not enable or start it, and does not wait on
+  the i2pd SAM bridge
+
+#### Scenario: First install with no parked file
+- **WHEN** `/etc/alt-bitnodes/parked-units` does not exist
+- **THEN** every unit is enabled as usual
 

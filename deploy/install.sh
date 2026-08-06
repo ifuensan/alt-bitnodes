@@ -30,6 +30,36 @@ log() { printf '\n\033[1;36m==>\033[0m %s\n' "$*"; }
 
 require_root() { [[ $EUID -eq 0 ]] || { echo "run with sudo"; exit 1; }; }
 
+# Units the operator has deliberately parked, one name per line. A deploy
+# must never undo that decision: stopping the crawler stack is how running
+# costs are cut (the egress bill is ~99% Tor/I2P overlay traffic), and an
+# installer that silently restarts it turns a docs push into a bill.
+#
+#   Park:   echo bitnodes.service | sudo tee -a /etc/alt-bitnodes/parked-units
+#           sudo systemctl disable --now bitnodes.service
+#   Unpark: sudo sed -i '/^bitnodes\.service$/d' /etc/alt-bitnodes/parked-units
+#           sudo bash deploy/install.sh
+#
+# `systemctl is-enabled` cannot be used for this: a freshly installed unit
+# that was never enabled also reports "disabled", so it would break first
+# installs. An explicit file states intent unambiguously.
+PARKED_UNITS_FILE=/etc/alt-bitnodes/parked-units
+
+is_parked() {
+  [[ -f "${PARKED_UNITS_FILE}" ]] || return 1
+  grep -qxF "$1" "${PARKED_UNITS_FILE}"
+}
+
+# systemctl enable [--now] that respects parked units.
+enable_unit() {
+  local unit="$1"; shift
+  if is_parked "${unit}"; then
+    log "${unit} is parked; leaving it stopped"
+    return 0
+  fi
+  systemctl enable "$@" "${unit}"
+}
+
 install_apt_packages() {
   log "Installing apt packages"
   export DEBIAN_FRONTEND=noninteractive
@@ -40,7 +70,7 @@ install_apt_packages() {
     libxmlsec1-dev libffi-dev liblzma-dev curl wget git ca-certificates \
     redis-server sqlite3 tor nginx
   systemctl enable --now redis-server
-  systemctl enable --now tor
+  enable_unit tor.service --now
 }
 
 setup_i2pd() {
@@ -50,7 +80,8 @@ setup_i2pd() {
     apt-get update -qq
     apt-get install -y -qq i2pd
   fi
-  systemctl enable --now i2pd
+  enable_unit i2pd.service --now
+  is_parked i2pd.service && return
   # SAM is enabled by default on 127.0.0.1:7656 in current i2pd. Verify with
   # a bounded wait; warn-only because I2P is a best-effort ring and a broken
   # SAM must not block clearnet/Tor deploys.
@@ -124,7 +155,7 @@ ${tor_opts}"
       # Full restart, not reload: also clears degraded guard/circuit state.
       systemctl try-restart "tor@${name}" 2>/dev/null || true
     fi
-    systemctl enable --now "tor@${name}"
+    enable_unit "tor@${name}.service" --now
   done
 
   # Same treatment for the default instance (SocksPort 9050): it shares the
@@ -299,16 +330,20 @@ install_systemd_units() {
     /etc/systemd/system/alt-bitnodes-collector.service
 
   systemctl daemon-reload
-  systemctl enable bitnodes.service alt-bitnodes.service alt-bitnodes-mcp.service
-  systemctl enable --now export-prune.timer
-  systemctl enable --now alt-bitnodes-archive.timer
-  systemctl enable --now alt-bitnodes-window-stats.timer
-  systemctl enable --now alt-bitnodes-collector.timer
+  systemctl enable alt-bitnodes.service alt-bitnodes-mcp.service
+  enable_unit bitnodes.service
+  enable_unit export-prune.timer --now
+  enable_unit alt-bitnodes-archive.timer --now
+  enable_unit alt-bitnodes-window-stats.timer --now
+  enable_unit alt-bitnodes-collector.timer --now
   # Dashboard + MCP are stateless: restart on every deploy so re-runs pick up
   # unit-file changes. The crawler is stateful (open sockets, onion circuits):
   # restart only if its inputs changed or it isn't running.
   systemctl restart alt-bitnodes.service alt-bitnodes-mcp.service
-  if [[ "$(crawler_fingerprint)" != "${CRAWLER_STATE_BEFORE}" ]] \
+  if is_parked bitnodes.service; then
+    # "not running" is the parked state, not a fault to repair.
+    log "bitnodes.service is parked; not restarting it"
+  elif [[ "$(crawler_fingerprint)" != "${CRAWLER_STATE_BEFORE}" ]] \
       || ! systemctl is-active --quiet bitnodes.service; then
     log "Crawler changed or not running; restarting bitnodes.service"
     systemctl restart bitnodes.service
