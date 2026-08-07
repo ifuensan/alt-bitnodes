@@ -17,7 +17,6 @@ from queries import (
     list_archives,
     load_block,
     load_propagation,
-    load_unique_estimate,
     load_window_stats,
     groups_by_ip,
     known_addresses_set,
@@ -145,11 +144,6 @@ def propagation_block(block_hash: str) -> dict:
 @app.get("/api/services")
 def services() -> dict:
     return latest_services_payload()
-
-
-@app.get("/api/unique-nodes")
-def unique_nodes() -> dict:
-    return load_unique_estimate()
 
 
 @app.get("/api/latest", responses={404: {"description": ERR_NO_SNAPSHOTS}})
@@ -332,10 +326,26 @@ def v1_services() -> dict:
     return latest_services_payload()
 
 
-@app.get("/api/v1/stats/unique-nodes/", tags=["v1"],
-         summary="Weighted unique-node estimate (1/N over advertised network types)")
+# Withdrawn 2026-08: the 1/N estimate derived N from the addresses a peer
+# advertised about *other* nodes, so it measured address-book diversity, not
+# how many networks a node lives on. Correcting the input would not have
+# helped either: a node never discloses the link between its clearnet and
+# overlay addresses, which is the point of Tor and I2P. 410 rather than 404
+# so an integrator reads why instead of suspecting a typo.
+@app.get("/api/v1/stats/unique-nodes/", tags=["v1"], status_code=410,
+         summary="Withdrawn: no deduplicated node count is published",
+         responses={410: {"description": "Endpoint withdrawn"}})
 def v1_unique_nodes() -> dict:
-    return load_unique_estimate()
+    raise HTTPException(status_code=410, detail={
+        "error": "No deduplicated node count is published.",
+        "reason": (
+            "Reachable addresses are not machines: a node reachable over "
+            "several networks contributes one address per network, and the "
+            "link between a node's clearnet address and its onion/I2P "
+            "addresses is not observable."
+        ),
+        "alternative": "/api/v1/stats/window/",
+    })
 
 
 @app.get("/api/v1/archives/", tags=["v1"], summary="List archived snapshot photos")

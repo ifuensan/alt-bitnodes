@@ -113,6 +113,11 @@ restoring the deleted JSON, which the collector would rewrite.
 
 ## Open Questions
 
-- Whether the article and the BNOC post should carry the retraction
-  explicitly. Leaning yes: "we published a metric, it was wrong, here is
-  why" is a stronger credential than never having shipped it.
+- ~~Whether the article and the BNOC post should carry the retraction
+  explicitly.~~ **Resolved 2026-08-07 (ifuensan): yes.** "We published a
+  metric, it was wrong, here is why" is a stronger credential than never
+  having shipped it, and it is the same claim the rest of the post makes —
+  that a published number is only as good as the method stated beside it.
+  The Delving draft gained a retraction section; the already-published
+  hacknodes.com articles and the BNOC post are amended by hand, tracked in
+  `docs/follow-ups.md`.

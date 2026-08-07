@@ -19,9 +19,6 @@ WINDOW_STATS_FILE = Path(
 SERVICES_SERIES_FILE = Path(
     os.environ.get("BITNODES_SERVICES_SERIES_FILE", "data/services-series.json")
 )
-UNIQUE_STATS_FILE = Path(
-    os.environ.get("BITNODES_UNIQUE_STATS_FILE", "data/unique-nodes.json")
-)
 PROPAGATION_DIR = Path(
     os.environ.get("BITNODES_PROPAGATION_DIR", "data/propagation")
 )

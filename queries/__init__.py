@@ -44,7 +44,6 @@ from queries.services import (
     load_services_series,
     services_breakdown,
 )
-from queries.unique_nodes import load_unique_estimate
 from queries.block_propagation import load_block, load_propagation
 from queries.util import iso2_to_iso3
 
@@ -56,7 +55,6 @@ __all__ = [
     "latest_services_payload",
     "load_services_series",
     "services_breakdown",
-    "load_unique_estimate",
     "load_block",
     "load_propagation",
     "EXPORT_DIR",

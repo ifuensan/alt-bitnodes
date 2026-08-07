@@ -199,6 +199,42 @@ self-hosted Proxmox.
   partly a budget decision — one more reason cross-tracker numbers
   diverge.
 
+## A retraction: the deduplicated count I published was wrong
+
+While writing this I checked a metric my dashboard had been serving
+since late July: a "unique nodes" estimate that weighted each reachable
+address 1/N, where N was the number of network types that node
+advertised. It is withdrawn, and the endpoint now answers 410 with the
+reason. Two things were wrong with it.
+
+The input was the wrong data. N came from the crawler's `peer:*` keys,
+which cache the response to a `GETADDR` — the addresses a peer knows
+about *other* nodes, i.e. a sample of its addrman. That is not the set
+of addresses the peer itself is reachable on. Since Core stores onion
+and I2P addresses whether or not it can dial them, a clearnet-only node
+with a varied address book was weighted 1/3 or 1/4 and counted as a
+fraction of a machine. The estimate deflated silently, and the numbers
+looked plausible the whole time.
+
+Fixing the input would not have saved it. Deduplicating across networks
+means linking a node's IPv4 address to its `.onion` or `.b32.i2p`
+address, and that link is never disclosed: Core self-advertises through
+`GetLocalAddrForPeer()`, which picks an address belonging to the network
+of the peer it is talking to — a node reached over IPv4 announces its
+IPv4, a node reached over Tor announces its onion. Unlinkability across
+networks is what Tor and I2P are for. No amount of crawling defeats it.
+
+So there is no deduplicated node count on my dashboard, and there should
+not be one on anyone else's. The comparable figure is the windowed
+count: distinct addresses observed per network over a rolling window,
+which makes no claim to count machines. That is the 27,063 above, and
+it is what bitnod.es's 22,232 is too.
+
+This belongs in a post about measurement artifacts more than anywhere
+else: the previous nine stages are about mistaking infrastructure limits
+for network properties, and this one is the same error committed by me,
+in public, in a number with a decimal point on it.
+
 ## What's in the fork
 
 For anyone who wants to reuse this rather than repeat it, these are the

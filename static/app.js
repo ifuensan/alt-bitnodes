@@ -295,21 +295,6 @@ async function loadWindowStats() {
   }
 }
 
-// Band 2: the 1/N-deduplicated estimate. Em-dashes until the collector has
-// produced a dataset.
-async function loadUniqueBand() {
-  try {
-    const est = await fetchJSON("/api/unique-nodes");
-    if (est.estimate == null) return;
-    document.getElementById("kpi-uniq-total").textContent = fmt.format(est.estimate);
-    document.getElementById("kpi-uniq-clearnet").textContent = fmt.format(est.clearnet);
-    document.getElementById("kpi-uniq-tor").textContent = fmt.format(est.tor);
-    document.getElementById("kpi-uniq-i2p").textContent = fmt.format(est.i2p);
-  } catch (e) {
-    console.error("loadUniqueBand:", e);
-  }
-}
-
 // Numbers-only services strip under the side tiles; the full charts live on
 // /research. PRUNED uses the derived metric (LIMITED without NETWORK) —
 // BIP159: full nodes signal NODE_NETWORK_LIMITED too, so the raw flag is
@@ -407,9 +392,8 @@ async function init() {
     select.value = timestamps[timestamps.length - 1];
     await loadSnapshot(timestamps[timestamps.length - 1]);
   }
-  // Secondary bands + strip load lazily after the primary KPIs.
+  // Secondary band + strip load lazily after the primary KPIs.
   loadWindowStats();
-  loadUniqueBand();
   loadServicesStrip();
 }
 

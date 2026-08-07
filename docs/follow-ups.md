@@ -156,8 +156,41 @@ dashboard, adapted from two sources:
      network types from the composition of its addr advertisements,
      then weighting each address 1/N (N = network types detected), so a
      dual-stack+Tor node counts 1.0 instead of 3. Known limitation:
-     can't dedupe multiple addresses of the same network type. Could
-     complement our 5-day rolling-window unique count.
+     can't dedupe multiple addresses of the same network type.
+     **Do not adopt this** — we shipped it in July 2026 and withdrew it
+     on 2026-08-07: a peer's addr advertisements describe the addresses
+     it knows about *other* nodes, not its own, and the cross-network
+     link a dedup needs is never disclosed (`GetLocalAddrForPeer()`
+     answers with an address of the asking peer's own network). See
+     `openspec/changes/archive/*-retire-unique-nodes-estimate/`. If the
+     About page discusses unique counts at all, it should state that we
+     publish no deduplicated count and why.
+
+### Retraction fan-out: places that still cite the 1/N unique estimate
+
+**Status**: Open 2026-08-07, opened by the `retire-unique-nodes-estimate`
+change. The metric is gone from the code, the API (410), the MCP and the
+dashboard, and the Delving draft carries an explicit retraction section.
+These live outside this repo or outside the change's reach:
+
+- **NLnet grant draft** — deliverable T3 lists weighted unique-node
+  counts as something we produce. It no longer exists and cannot be made
+  correct; rewrite T3 around the windowed per-network counts before the
+  draft goes out.
+- **The published hacknodes.com articles (es/en)** and **the BNOC post** —
+  both describe the dashboard as serving a deduplicated estimate. The
+  decision (design.md, confirmed by ifuensan) is that the retraction is
+  carried explicitly rather than quietly edited out: a short note saying
+  we published it, it was wrong, and why. Needs ifuensan — they are
+  published surfaces, not files here.
+- **`openspec/changes/archive/2026-07-23-expose-latent-crawler-data/`** —
+  describes the 1/N work as delivered. Archives are history and stay as
+  written; this entry is the pointer that says the capability was later
+  retired.
+- **Host cleanup** — `data/unique-nodes.json` is stale on the EC2 host;
+  the collector no longer writes it. Delete it on the next deploy
+  (tasks 5.3/5.4 of the change, still open because the deploy has not
+  run — and that deploy must leave the parked crawler units parked).
 
 ### I2P SAM crawl integration
 

@@ -1,27 +1,35 @@
-"""Endpoints for the latent-crawler-data features: propagation, services,
-unique-nodes. Empty datasets are 200s with empty payloads, never errors."""
+"""Endpoints for the latent-crawler-data features: propagation and services.
+Empty datasets are 200s with empty payloads, never errors."""
 
 from fastapi.testclient import TestClient
 
 import app as app_module
 from queries import block_propagation as bp
-from queries import unique_nodes as un
 from tests.conftest import make_row
 from tests.test_block_propagation import HASH_A, FakeInvRedis, _zset
-from tests.test_unique_nodes import FakePeerRedis, _gossip
 
 client = TestClient(app_module.app)
 
 
 def test_empty_states_are_200():
-    for path in ("/api/propagation", "/api/services", "/api/unique-nodes",
-                 "/api/v1/stats/propagation/", "/api/v1/stats/services/",
-                 "/api/v1/stats/unique-nodes/"):
+    for path in ("/api/propagation", "/api/services",
+                 "/api/v1/stats/propagation/", "/api/v1/stats/services/"):
         res = client.get(path)
         assert res.status_code == 200, path
     assert client.get("/api/propagation").json()["blocks"] == []
     assert client.get("/api/services").json()["latest"] is None
-    assert client.get("/api/unique-nodes").json()["estimate"] is None
+
+
+def test_unique_nodes_v1_is_gone_with_a_pointer():
+    res = client.get("/api/v1/stats/unique-nodes/")
+    assert res.status_code == 410
+    detail = res.json()["detail"]
+    assert detail["alternative"] == "/api/v1/stats/window/"
+    assert "not observable" in detail["reason"]
+
+
+def test_unique_nodes_legacy_route_is_gone():
+    assert client.get("/api/unique-nodes").status_code == 404
 
 
 def test_propagation_served_from_collected_files(data_dir):
@@ -47,13 +55,3 @@ def test_services_endpoint_serves_latest_and_series(write_snapshot):
     flags = {f["flag"]: f for f in payload["latest"]["flags"]}
     assert flags["NODE_P2P_V2"]["pct"] == 100.0
     assert payload["series"]["days"] == []
-
-
-def test_unique_nodes_endpoint_serves_cache(write_snapshot):
-    write_snapshot(1000, [make_row(address="1.2.3.4")])
-    fake = FakePeerRedis({"peer:1.2.3.4-8333": _gossip("9.9.9.9", "z.onion")})
-    un.write_unique_estimate(redis_conn=fake)
-    payload = client.get("/api/v1/stats/unique-nodes/").json()
-    assert payload["estimate"] == 0.5
-    assert payload["reachable"] == 1
-    assert "method" in payload

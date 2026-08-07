@@ -109,14 +109,19 @@ GET /api/v1/groups/by-ip/              IPs que hospedan más de un nodo
 GET /api/v1/stats/window               nodos únicos por red en ventanas (unión)
 GET /api/v1/stats/propagation/         propagación de bloques (ECDF por red)
 GET /api/v1/stats/services/            adopción de service flags + serie diaria
-GET /api/v1/stats/unique-nodes/        estimación de nodos únicos (método 1/N)
+GET /api/v1/stats/unique-nodes/        410 Gone (retirado, ver más abajo)
 ```
 
 Notas de definición: los tiempos de propagación son **relativos al primer
 anuncio observado por este crawler** (un solo punto de vista, no latencia
-absoluta de la red); la estimación de nodos únicos pondera cada dirección
-alcanzable 1/N según los tipos de red presentes en su gossip `addr`
-anunciado (no puede deduplicar múltiples direcciones del mismo tipo de red).
+absoluta de la red). **No se publica ningún recuento deduplicado de nodos**:
+la estimación 1/N se retiró en agosto de 2026 porque su N salía del gossip
+`addr` de un peer, que describe las direcciones que ese peer conoce *de
+otros*, no las suyas. Corregir la entrada tampoco bastaría — el enlace entre
+la dirección clearnet de un nodo y sus direcciones onion/I2P no es
+observable, que es justo el objetivo de Tor e I2P. La cifra comparable es
+`/api/v1/stats/window`, que cuenta direcciones distintas por red en una
+ventana y no pretende contar máquinas.
 
 ### Geolocalización (GeoIP)
 
@@ -264,14 +269,19 @@ GET /api/v1/groups/by-ip/              IPs hosting more than one node
 GET /api/v1/stats/window               unique nodes per network over windows
 GET /api/v1/stats/propagation/         block propagation (ECDF per network)
 GET /api/v1/stats/services/            service-flag adoption + daily series
-GET /api/v1/stats/unique-nodes/        weighted unique-node estimate (1/N)
+GET /api/v1/stats/unique-nodes/        410 Gone (withdrawn, see below)
 ```
 
 Definition notes: propagation times are **relative to the first announcement
-observed by this crawler** (one vantage point, not absolute network latency);
-the unique-node estimate weights each reachable address 1/N over the network
-types present in its advertised `addr` gossip (it cannot deduplicate multiple
-addresses of the same network type).
+observed by this crawler** (one vantage point, not absolute network latency).
+**No deduplicated node count is published**: the 1/N estimate was withdrawn in
+August 2026 because its N came from a peer's `addr` gossip, which describes
+the addresses that peer knows about *other* nodes, not its own. Fixing the
+input would not rescue it either — the link between a node's clearnet address
+and its onion/I2P addresses is not observable, which is the point of Tor and
+I2P. The comparable figure is `/api/v1/stats/window`, which counts distinct
+addresses per network over a rolling window and makes no claim to count
+machines.
 
 ### Geolocation (GeoIP)
 

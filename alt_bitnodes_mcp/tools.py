@@ -13,7 +13,6 @@ from queries import (
     latest_services_payload,
     list_archives as _list_archives,
     load_propagation,
-    load_unique_estimate,
     list_snapshots as _list_snapshots,
     load_snapshot,
     load_window_stats,
@@ -184,18 +183,6 @@ def register(mcp: FastMCP) -> None:
         data = latest_services_payload()
         if data["latest"] is None:
             data["note"] = "no snapshots available yet"
-        return data
-
-    @mcp.tool()
-    def get_unique_nodes_estimate() -> dict:
-        """Deduplicated node estimate: each reachable address weighted 1/N
-        over the network types in its advertised addr gossip, with the raw
-        reachable count, per-class weighted sums, and the N-composition
-        histogram. `estimate` is null (with a note) until the collector has
-        run."""
-        data = load_unique_estimate()
-        if data["estimate"] is None:
-            data["note"] = "no estimate computed yet — collector has not run"
         return data
 
     @mcp.tool()

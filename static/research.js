@@ -305,63 +305,6 @@ async function loadServices() {
   renderServicesHistory();
 }
 
-// --- Section 3: unique-node composition ------------------------------------
-
-let uniquePayload = null;
-
-function renderComposition() {
-  const el = document.getElementById("chart-composition");
-  const tok = themeTokens();
-  const colors = networkColors();
-  const c = uniquePayload.composition;
-  // Keep zero categories so the legend always lists all three (a node
-  // advertising 1/2/3+ network types) — the weighting denominator is
-  // clearer when the whole scale is present, even at 0%.
-  const raw = [
-    { k: "1 network type", v: c.n1, color: colors.ipv4 },
-    { k: "2 network types", v: c.n2, color: colors.tor },
-    { k: "3+ network types", v: c.n3plus, color: colors.i2p },
-  ];
-  const total = raw.reduce((s, d) => s + d.v, 0) || 1;
-  const data = raw.map((d) => ({ ...d, pct: Math.round((1000 * d.v) / total) / 10 }));
-  const chart = Plot.plot({
-    width: el.clientWidth || 900,
-    height: 90,
-    style: { background: "transparent", color: tok.text, fontSize: "12px", fontFamily: MONO_FONT_STACK },
-    x: { label: "% of reachable addresses", grid: true },
-    color: { domain: data.map((d) => d.k), range: data.map((d) => d.color), legend: true },
-    marks: [
-      Plot.barX(data, { x: "pct", fill: "k" }),
-      Plot.tip(data, Plot.pointerX(Plot.stackX({
-        x: "pct",
-        title: (d) => `${d.k}\n${d.pct}% — ${fmt.format(d.v)} addresses`,
-        fill: tok.surface, stroke: tok.border,
-      }))),
-    ],
-  });
-  el.replaceChildren(chart);
-}
-
-async function loadUnique() {
-  try {
-    uniquePayload = await fetchJSON("/api/unique-nodes");
-  } catch (e) {
-    document.getElementById("unique-method").textContent = "unique-nodes data unavailable: " + e.message;
-    return;
-  }
-  document.getElementById("unique-method").textContent = uniquePayload.method;
-  if (uniquePayload.estimate == null) {
-    document.getElementById("unique-numbers").textContent =
-      "No estimate computed yet — the collector produces it every 10 minutes.";
-    return;
-  }
-  document.getElementById("unique-numbers").textContent =
-    `${fmt.format(uniquePayload.reachable)} reachable addresses → ` +
-    `≈${fmt.format(uniquePayload.estimate)} unique nodes ` +
-    `(clearnet ${fmt.format(uniquePayload.clearnet)}, tor ${fmt.format(uniquePayload.tor)}, i2p ${fmt.format(uniquePayload.i2p)})`;
-  renderComposition();
-}
-
 // --- Theme toggle (same behaviour as the overview page) --------------------
 
 function currentTheme() {
@@ -377,7 +320,6 @@ function rerenderAll() {
     renderServicesBars();
     renderServicesHistory();
   }
-  if (uniquePayload?.estimate != null) renderComposition();
 }
 
 function initTheme() {
@@ -396,4 +338,3 @@ initTheme();
 // Independent, lazy sections.
 loadPropagation();
 loadServices();
-loadUnique();

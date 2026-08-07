@@ -16,7 +16,6 @@ _ARCHIVE_DIR = Path(tempfile.mkdtemp(prefix="alt-bitnodes-test-archive-"))
 os.environ["BITNODES_ARCHIVE_DIR"] = str(_ARCHIVE_DIR)
 _DATA_DIR = Path(tempfile.mkdtemp(prefix="alt-bitnodes-test-data-"))
 os.environ["BITNODES_SERVICES_SERIES_FILE"] = str(_DATA_DIR / "services-series.json")
-os.environ["BITNODES_UNIQUE_STATS_FILE"] = str(_DATA_DIR / "unique-nodes.json")
 os.environ["BITNODES_PROPAGATION_DIR"] = str(_DATA_DIR / "propagation")
 os.environ["BITNODES_WINDOW_STATS_FILE"] = str(_DATA_DIR / "window-stats.json")
 
