@@ -23,8 +23,23 @@ PYTHON_VERSION="3.12.4"
 USER_AGENT="${BITNODES_USER_AGENT:-/alt-bitnodes:0.1/}"
 # Extra Tor instances (tor@bitnodes1..N on SocksPorts 9051..905N) besides the
 # distro default on 9050. Tor is single-threaded; the crawler spreads onion
-# dials across every proxy listed in tor_proxies.
+# dials across every proxy listed in tor_proxies, one fixed instance per
+# onion address (see tor_proxy_affinity below).
 TOR_POOL_SIZE=8
+
+# A/B arm for the MaxCircuitDirtiness experiment: space-separated pool
+# instance numbers that get TOR_DIRTINESS_VALUE instead of Tor's 600s
+# default. Empty means no experiment — every instance keeps the default.
+# Both arms must be in place BEFORE the pool starts, or the treated half
+# re-ramps while the control half is already warm and the run is worthless.
+TOR_DIRTINESS_ARM="${TOR_DIRTINESS_ARM:-}"
+TOR_DIRTINESS_VALUE="${TOR_DIRTINESS_VALUE:-3600}"
+
+# Pin each .onion to one Tor instance so revisits reuse the descriptor and
+# rendezvous circuit that instance already holds. Without this,
+# MaxCircuitDirtiness is nearly inert: a revisit meets the warm circuit only
+# 1/N of the time.
+TOR_PROXY_AFFINITY="${TOR_PROXY_AFFINITY:-True}"
 
 log() { printf '\n\033[1;36m==>\033[0m %s\n' "$*"; }
 
@@ -139,9 +154,36 @@ setup_tor_pool() {
   # trade-off does not apply. NumEntryGuards is inert with it but kept so
   # the desired torrc byte-matches the live files (a mismatch would rewrite
   # and restart every daemon, collapsing the ramp).
+  #
+  # HeartbeatPeriod 900 (2026-08-12): each daemon logs its own circuit
+  # handshake and connection counters every 15 min. That journal line is the
+  # per-instance measurement of handshake churn, which is what the
+  # MaxCircuitDirtiness A/B needs and what no external tool can attribute.
   local tor_opts="MaxClientCircuitsPending 512
 NumEntryGuards 8
-UseEntryGuards 0"
+UseEntryGuards 0
+HeartbeatPeriod 900"
+
+  # Per-unit egress accounting for the same experiment. systemd counts bytes
+  # in the unit's cgroup, so it attributes exactly, where paired `ss` deltas
+  # miss every connection that begins and ends between two samples -- most of
+  # them at ~1k new TLS connections/min. Written inline rather than copied
+  # from the repo: this function runs before setup_dashboard clones it.
+  # IPAccounting takes effect when a unit starts, which the torrc rewrite
+  # below already forces for any instance whose configuration changed.
+  local accounting_dir=/etc/systemd/system/tor@.service.d
+  local accounting_file="${accounting_dir}/ip-accounting.conf"
+  local accounting_desired="# Managed by alt-bitnodes install.sh
+# Per-instance byte counters: systemctl show tor@bitnodes1 -p IPEgressBytes
+# Counters reset with the unit, so any interval spanning a restart is void.
+[Service]
+IPAccounting=yes"
+  mkdir -p "${accounting_dir}"
+  if [[ ! -f "${accounting_file}" ]] || [[ "$(cat "${accounting_file}")" != "${accounting_desired}" ]]; then
+    printf '%s\n' "${accounting_desired}" > "${accounting_file}"
+    systemctl daemon-reload
+  fi
+
   local i name port torrc desired
   for i in $(seq 1 "${TOR_POOL_SIZE}"); do
     name="bitnodes${i}"
@@ -150,6 +192,14 @@ UseEntryGuards 0"
     [[ -d "/etc/tor/instances/${name}" ]] || tor-instance-create "${name}"
     desired="SocksPort 127.0.0.1:${port}
 ${tor_opts}"
+    # A/B arm: only the instances named in TOR_DIRTINESS_ARM get a
+    # non-default circuit lifetime, so both lifetimes run side by side in one
+    # pool under identical network conditions. Written into `desired` so the
+    # byte-comparison below still decides restarts per instance.
+    if [[ " ${TOR_DIRTINESS_ARM} " == *" ${i} "* ]]; then
+      desired="${desired}
+MaxCircuitDirtiness ${TOR_DIRTINESS_VALUE}"
+    fi
     if [[ ! -f "${torrc}" ]] || [[ "$(cat "${torrc}")" != "${desired}" ]]; then
       printf '%s\n' "${desired}" > "${torrc}"
       # Full restart, not reload: also clears degraded guard/circuit state.
@@ -268,6 +318,9 @@ setup_crawler() {
   # Seed the I2P ring: clearnet peers rarely gossip .b32.i2p, so without
   # seeds it never bootstraps. The list ships with the crawler fork.
   ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" i2p_nodes_file conf/i2p_seeds.txt
+  ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" tor_proxy_affinity "${TOR_PROXY_AFFINITY}"
+  ensure_conf_key "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf" tor_proxy_affinity "${TOR_PROXY_AFFINITY}"
+
   ensure_conf_key "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf" i2p True
   ensure_conf_key "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf" i2p_proxies 127.0.0.1:7656
 
