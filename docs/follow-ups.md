@@ -155,6 +155,59 @@ ping stack (`ping.workers` 600, 6 slaves) — snapshots count
 *simultaneously open* sockets, and slow Tor sockets compete for those
 slots — not more Tor instances.
 
+### MaxCircuitDirtiness vs the crawl cadence (investigate)
+
+**Status**: Open 2026-08-11, prompted by an outside suggestion that
+"raising MaxCircuitDirtiness also cuts handshake churn". Documentation
+checked; there is a concrete mismatch worth testing, and one tempting
+hypothesis that is already dead.
+
+**The mismatch.** `torrc(5)` on `MaxCircuitDirtiness` (default 10
+minutes): "Feel free to reuse a circuit that was first used at most NUM
+seconds ago, but never attach a new stream to a circuit that is too old.
+*For hidden services, this applies to the last time a circuit was used,
+not the first.*" For onion circuits it is therefore an **idle** timer,
+not an age cap. Our crawl revisits the same onion set every
+`snapshot_delay = 1800` (30 min, set in `install.sh:257`) — three times
+the default dirtiness window. So every cycle finds every rendezvous
+circuit expired and pays a full onion handshake again: descriptor
+lookup, introduction circuit, rendezvous circuit. Raising the value past
+the revisit interval (test ~2400-3600) should let a re-dial reuse the
+circuit that is already there.
+
+This compounds with `UseEntryGuards 0`: without guards, a new circuit
+often means a new OR connection and a fresh TLS + link handshake to a
+random relay, which is why steady state showed ~1k new TLS
+connections/min. Fewer rebuilds means fewer of those.
+
+**The dead hypothesis — do not spend time on padding.** Netflow padding
+looked like a large, easy win with ~10k open Tor connections, but
+`padding-spec` says: "We pad only the client's connection to the Guard
+node, and not any other connection." We run with guards off, so there
+is no padded connection to speak of; `ConnectionPadding 0` /
+`ReducedConnectionPadding 1` have nothing to remove. Quoted overhead is
+~309KB per padded connection anyway (69KB reduced).
+
+**Counter-indication.** Do *not* also raise `NewCircuitPeriod` (default
+30s) in the same breath. Preemptively built clean circuits are what get
+repurposed as rendezvous circuits, so slowing that down could starve
+onion dial throughput — the opposite of what we want.
+
+**Test protocol** (one variable, as with the 256/512 cap test): during a
+run, set `MaxCircuitDirtiness 3600` on *half* the `tor@` pool, leave the
+rest at default, and compare over several hours: per-process egress
+deltas (`bytes_sent` over 60s, the method from the 2026-08-01 egress
+autopsy), circuit build counts from the Tor control port, and the onion
+count in snapshots. What we want to see is egress down with the onion
+plateau unchanged. Risk to watch: circuits held an hour instead of ten
+minutes means many more simultaneously open circuits — watch Tor memory
+and whether `MaxClientCircuitsPending 512` starts biting.
+
+Note this can only be measured with the crawler running, which is parked
+until the Proxmox migration — but if it works it is strictly better than
+the burst-crawling idea above: it cuts cost without touching the onion
+ceiling or the 8-day window.
+
 ### IPv6 connectivity
 
 **Status**: Done 2026-07-17, AWS-side only (no repo change). VPC
