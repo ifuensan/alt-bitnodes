@@ -157,10 +157,11 @@ slots — not more Tor instances.
 
 ### MaxCircuitDirtiness vs the crawl cadence (investigate)
 
-**Status**: Open 2026-08-11, prompted by an outside suggestion that
-"raising MaxCircuitDirtiness also cuts handshake churn". Documentation
-checked; there is a concrete mismatch worth testing, and one tempting
-hypothesis that is already dead.
+**Status**: Open 2026-08-11. **Suggested by b10c** (0xB10C) in the BNOC
+thread on the stages post — "raising MaxCircuitDirtiness also cuts
+handshake churn". Second useful lead from him after Arti (below).
+Documentation checked; there is a concrete mismatch worth testing, and
+one tempting hypothesis that is already dead.
 
 **The mismatch.** `torrc(5)` on `MaxCircuitDirtiness` (default 10
 minutes): "Feel free to reuse a circuit that was first used at most NUM
@@ -206,7 +207,24 @@ and whether `MaxClientCircuitsPending 512` starts biting.
 Note this can only be measured with the crawler running, which is parked
 until the Proxmox migration — but if it works it is strictly better than
 the burst-crawling idea above: it cuts cost without touching the onion
-ceiling or the 8-day window.
+ceiling or the 8-day window. Either way the result is worth reporting
+back in the BNOC thread, since the lead came from there.
+
+### Arti instead of the nine-daemon Tor pool (investigate)
+
+**Status**: Open 2026-08-06, **suggested by b10c** in the same BNOC
+thread; ifuensan took this one to investigate personally. The argument:
+Arti is Rust on Tokio, so one process uses every core, where C Tor is
+single-threaded and forced us into a pool of nine daemons to reach the
+idle cores (stage 5).
+
+The question that decides it, per ifuensan: **does Arti let us disable
+entry guards?** Our onion ceiling came from `UseEntryGuards 0` (3 →
+~10.8k), because guard per-IP anti-DoS throttles exactly the circuit
+creation a crawler does. If Arti has no equivalent escape hatch, more
+cores buy nothing — we would be back to being throttled at one or two
+guards, just in a faster language. Check the Arti config surface before
+any porting work.
 
 ### IPv6 connectivity
 
