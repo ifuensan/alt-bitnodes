@@ -73,6 +73,55 @@ Notes for the migration:
   3.219.165.64), review WAF (~$30/month) and CloudWatch dashboards
   (~$9/month) — they die with the AWS footprint.
 
+### Duty-cycle the crawler to stay on AWS cheaply (idea, not decided)
+
+**Status**: Idea recorded 2026-08-11, no decision. ifuensan's proposal:
+instead of migrating, run the crawler in bursts — crawl for a while,
+photograph the best moment, stop, and start again ~5 days later — so
+the egress bill scales with uptime.
+
+The arithmetic works. A useful burst is ~14-18h, not two hours: onion
+took **13h** to reach its ~10.7k plateau after `UseEntryGuards 0`, and
+the socket-budget fix needed 5h to reach 11.6k. At $22/day that is
+~$13-17 per photo, ~6 photos/month, so **$80-110/month against $660**.
+
+Two objections, both load-bearing:
+
+1. **Burst hours are the most expensive hours.** Tor's egress is
+   circuit construction and i2pd's is tunnel building plus a NetDB
+   re-bootstrap; a cold start does nothing but that. Steady state was
+   already ~1k new TLS connections/min. Duty-cycling pays the ramp
+   every cycle and never amortises it over a plateau, so $13-17 is a
+   floor.
+2. **It kills the 8-day windowed union**, which is the metric we argued
+   is the *correct* one for Tor (onion connections are transient, so
+   instantaneous counts structurally undercount) and the one that makes
+   us comparable to bitnod.es. One burst per 5 days leaves 1-2 bursts
+   inside an 8-day window. Having just retired the 1/N estimate for
+   measuring the wrong thing, trading the sound metric for the unsound
+   one to save transfer is a bad swap. Collateral: gaps in the daily
+   services series, and the archive's GFS tiering assumes one photo per
+   day — with bursts, "last snapshot of the period" can land after the
+   crawler stopped (a decaying photo), so the selection rule would have
+   to become "peak of the period".
+
+**Better variant if we go this way: cycle by network, not by time.**
+Clearnet is ~0.1% of egress (python ~0.2 MB/min vs tor ~110 + i2pd
+~137). Keep IPv4/IPv6 running 24/7 — it costs pocket change (~$1.60/day
+at 24k slots) and preserves continuity, the daily archive and a
+*clearnet* 8-day window that stays comparable — and burst only Tor+I2P,
+the 99%, for periodic overlay photos.
+
+Practical notes: compute is prepaid to 2026-11-10, so this buys time
+until exactly when the Proxmox/ONT-bridge work has to happen anyway;
+and a spiky 40k-connection profile trips anomaly detection harder than
+a flat line (one false positive already took production down for half
+an hour), so the low-threshold budget alarm becomes mandatory, not
+optional. Implementation sketch if approved: `i2p = False` + empty
+`tor_proxies` for the cheap mode, systemd timers bracketing `i2pd` and
+the `tor@` pool around a ~16h window, and the archiver selecting the
+period's peak instead of its last snapshot.
+
 ### CloudFront access logs to S3
 
 **Status**: Sonar hotspot `cloudformation:S6258` marked Safe
