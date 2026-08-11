@@ -27,11 +27,20 @@
 
 ## 3. Run the experiment
 
-- [ ] 3.0 Pre-flight: check free disk on the host. The full stack with I2P is
-      the exact workload that filled the 15G volume on 2026-07-20 and took
-      i2pd down with it; it was at 62% after the cleanup, logrotate is in
-      place since `0f944ef`, and the 15G→30G resize is still an open item in
-      the Logseq backlog. Resize first if it is anywhere near tight.
+- [ ] 3.0 **BLOCKER — disk.** Checked 2026-08-11: `/` is **87% full, 2.0G
+      free** of 15G, with everything parked. Breakdown: exports 3.4G (1,955
+      snapshots, deliberately frozen — that is the raw material for windows
+      and archive backfill, do not prune), `data/crawl` 950M, journald 1.5G,
+      propagation 818M, Redis `dump.rdb` 443M (frozen 2026-08-01), dead
+      `data/pcap` 246M and `rtt.sqlite` 27M from removed components.
+      Easy reclaim is ~1.6G (vacuum the journal, drop pcap and the rtt
+      sqlite), which only reaches ~3.6G free — still thin, because a full
+      run grows Redis and every BGSAVE writes a temp RDB beside it, and
+      orphaned `temp-*.rdb` files are exactly what filled the disk in July.
+      **Do the 15G→30G resize before starting** (`modify-volume` +
+      `growpart` + `resize2fs`, ~5 min, ~$1/month); it is already an open
+      item in the Logseq backlog. Needs an AWS session — the local CLI
+      session is expired.
 - [ ] 3.1 Deploy deliberately (this restarts the whole Tor pool) with the
       split already in place, `i2p = True` (full stack, decided 2026-08-12),
       and the sampler running

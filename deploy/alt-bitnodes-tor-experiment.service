@@ -1,0 +1,25 @@
+[Unit]
+# Samples the Tor pool for the MaxCircuitDirtiness A/B. Harmless when no
+# experiment is running (TOR_DIRTINESS_ARM empty): it just records every
+# instance as control.
+Description=alt-bitnodes Tor pool sampler (A/B measurement)
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+Environment=TOR_POOL_SIZE=__TOR_POOL_SIZE__
+# Quoted: the arm is space-separated and systemd splits an unquoted
+# Environment= line on whitespace, which would set the arm to just "1".
+Environment="TOR_DIRTINESS_ARM=__TOR_DIRTINESS_ARM__"
+Environment=TOR_DIRTINESS_VALUE=__TOR_DIRTINESS_VALUE__
+Environment=BITNODES_EXPORT_DIR=__EXPORT_DIR__
+ExecStart=__DASHBOARD_DIR__/deploy/tor-experiment-sample.sh /var/log/alt-bitnodes/tor-experiment.csv 60
+Restart=always
+RestartSec=10
+# The CSV is the whole point of the run; never let a full disk take the
+# sampler down silently while the expensive part keeps burning egress.
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

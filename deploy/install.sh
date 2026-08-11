@@ -32,7 +32,17 @@ TOR_POOL_SIZE=8
 # default. Empty means no experiment — every instance keeps the default.
 # Both arms must be in place BEFORE the pool starts, or the treated half
 # re-ramps while the control half is already warm and the run is worthless.
-TOR_DIRTINESS_ARM="${TOR_DIRTINESS_ARM:-}"
+#
+# Set here rather than passed in: the deploy runs `sudo bash install.sh` over
+# SSH with no environment, so an env-only knob would silently deploy an empty
+# arm and produce a run with nothing to compare. Empty this when the
+# experiment ends — it is a temporary state of the deployment, in git so it
+# is visible.
+#
+# 1-4 treated, 5-8 control. tor@default (9050) is neither: its torrc is
+# managed separately and the sampler does not read it, so it stays out of
+# the comparison entirely.
+TOR_DIRTINESS_ARM="${TOR_DIRTINESS_ARM:-1 2 3 4}"
 TOR_DIRTINESS_VALUE="${TOR_DIRTINESS_VALUE:-3600}"
 
 # Pin each .onion to one Tor instance so revisits reuse the descriptor and
@@ -375,12 +385,19 @@ install_systemd_units() {
   install -m 0755 "${DASHBOARD_DIR}/deploy/run-bitnodes.sh" "${CRAWLER_DIR}/run-bitnodes.sh"
   chown "${INSTALL_USER}:${INSTALL_USER}" "${CRAWLER_DIR}/run-bitnodes.sh"
 
+  install -m 0644 "${DASHBOARD_DIR}/deploy/alt-bitnodes-tor-experiment.service" /etc/systemd/system/alt-bitnodes-tor-experiment.service
+  install -d -m 0755 /var/log/alt-bitnodes
+
   sed -i "s|__USER__|${INSTALL_USER}|g; s|__CRAWLER_DIR__|${CRAWLER_DIR}|g; s|__DASHBOARD_DIR__|${DASHBOARD_DIR}|g; s|__EXPORT_DIR__|${CRAWLER_DIR}/data/export/f9beb4d9|g" \
     /etc/systemd/system/bitnodes.service /etc/systemd/system/alt-bitnodes.service \
     /etc/systemd/system/alt-bitnodes-mcp.service /etc/systemd/system/geoip-update.service \
     /etc/systemd/system/export-prune.service /etc/systemd/system/alt-bitnodes-archive.service \
     /etc/systemd/system/alt-bitnodes-window-stats.service \
-    /etc/systemd/system/alt-bitnodes-collector.service
+    /etc/systemd/system/alt-bitnodes-collector.service \
+    /etc/systemd/system/alt-bitnodes-tor-experiment.service
+
+  sed -i "s|__TOR_POOL_SIZE__|${TOR_POOL_SIZE}|g; s|__TOR_DIRTINESS_ARM__|${TOR_DIRTINESS_ARM}|g; s|__TOR_DIRTINESS_VALUE__|${TOR_DIRTINESS_VALUE}|g" \
+    /etc/systemd/system/alt-bitnodes-tor-experiment.service
 
   systemctl daemon-reload
   systemctl enable alt-bitnodes.service alt-bitnodes-mcp.service
@@ -389,6 +406,13 @@ install_systemd_units() {
   enable_unit alt-bitnodes-archive.timer --now
   enable_unit alt-bitnodes-window-stats.timer --now
   enable_unit alt-bitnodes-collector.timer --now
+  # The sampler only exists while an A/B is configured; with no arm there is
+  # nothing to compare and no reason to keep a process writing CSV forever.
+  if [[ -n "${TOR_DIRTINESS_ARM}" ]]; then
+    enable_unit alt-bitnodes-tor-experiment.service --now
+  else
+    systemctl disable --now alt-bitnodes-tor-experiment.service 2>/dev/null || true
+  fi
   # Dashboard + MCP are stateless: restart on every deploy so re-runs pick up
   # unit-file changes. The crawler is stateful (open sockets, onion circuits):
   # restart only if its inputs changed or it isn't running.
