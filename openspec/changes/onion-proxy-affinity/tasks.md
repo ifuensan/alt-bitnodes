@@ -27,8 +27,14 @@
 
 ## 3. Run the experiment
 
+- [ ] 3.0 Pre-flight: check free disk on the host. The full stack with I2P is
+      the exact workload that filled the 15G volume on 2026-07-20 and took
+      i2pd down with it; it was at 62% after the cleanup, logrotate is in
+      place since `0f944ef`, and the 15G→30G resize is still an open item in
+      the Logseq backlog. Resize first if it is anywhere near tight.
 - [ ] 3.1 Deploy deliberately (this restarts the whole Tor pool) with the
-      split already in place, `i2p = False`, and the sampler running
+      split already in place, `i2p = True` (full stack, decided 2026-08-12),
+      and the sampler running
 - [ ] 3.2 Let it run ~24h; confirm both arms reach their plateau
 - [ ] 3.3 Compare post-plateau egress **per carried connection** per arm,
       handshake counters from the heartbeat lines, and check the global onion

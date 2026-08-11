@@ -91,7 +91,15 @@ population and the crawl cadence are shared and cancel out.
   treated arm degrades, the global number falls even though its own bytes
   look better.
 - **Window**: onion needed 13h to plateau last time, so the run is ~24h and
-  only the post-plateau hours are analysed. Run with `i2p = False`.
+  only the post-plateau hours are analysed.
+- **Full stack, I2P included** (decided 2026-08-12): a Tor-only run would be
+  half the price but a full run is wanted anyway, and $10 + $22 beats $22
+  once. It costs the experiment nothing: i2pd's bytes land in its own unit
+  and cgroup, and the ping socket budget it consumes is taken from both arms
+  alike. One consequence for reading the result: the onion plateau will sit
+  **below** the ~10.8k of the Tor-heavy era, because I2P is competing for the
+  same 24k ping slots. That is expected and irrelevant to the comparison,
+  which is between arms in the same run — never against a historical number.
 
 Analysis is a diff of two CSV columns; nothing is concluded from a single
 sample or from the ramp.

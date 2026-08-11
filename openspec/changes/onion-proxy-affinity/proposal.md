@@ -77,8 +77,12 @@ _None._
   costs a ramp — which is fine, because the experiment wants every daemon
   starting cold at the same moment anyway. It must not be done casually
   mid-run.
-- **Cost**: the run itself is ~24h of crawler at AWS egress rates. Running it
-  with `i2p = False` keeps it near $10 instead of $22, since i2pd is ~55% of
-  egress and irrelevant to a Tor question.
+- **Cost**: the run itself is ~24h of crawler at AWS egress rates, ~$22 with
+  the full stack. Turning I2P off would halve that, but the decision
+  (ifuensan, 2026-08-12) is to run **`i2p = True`**: a full run is wanted
+  eventually anyway, and paying $10 now plus $22 later is worse than $22
+  once. The A/B survives it — i2pd is a separate unit and cgroup, so it does
+  not touch the per-daemon Tor counters, and what it does share (ping slots,
+  CPU) it takes from both arms equally, which adds noise but no bias.
 - **Risk**: with affinity, a dead daemon blackholes its whole share of onions
   instead of losing 1/9 of dials. See design.md.
