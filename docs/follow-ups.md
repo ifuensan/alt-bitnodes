@@ -122,6 +122,41 @@ optional. Implementation sketch if approved: `i2p = False` + empty
 the `tor@` pool around a ~16h window, and the archiver selecting the
 period's peak instead of its last snapshot.
 
+### Data lives on its own volume now (2026-08-13)
+
+**Status**: Done. Root was at **87% with 2.0G free** on the 15G volume with
+everything parked — the same corner that took i2pd and Tor down on
+2026-07-20. Rather than growing root, collected data moved to a separate
+30G gp3 volume (`vol-0ea199df66865b6d2`, us-east-1b, ~$2.4/month), mounted
+at `/data`:
+
+| bind mount | contents |
+|---|---|
+| `/data/bitnodes-data` → `~/bitnodes/data` | exports, crawl snapshots |
+| `/data/bitnodes-log` → `~/bitnodes/log` | crawler logs |
+| `/data/alt-bitnodes-data` → `~/alt-bitnodes/data` | propagation, archive, caches |
+| `/data/redis` → `/var/lib/redis` | RDB/AOF |
+| `/data/attic` | dead `pcap/` and `rtt.sqlite*` from removed components |
+
+**Bind mounts, not symlinks** — deliberately. The units run
+`ProtectHome=read-only` with `ReadWritePaths=` under `/home`, and the
+crawler confs use paths relative to their working directory. A bind keeps
+every path identical, so no conf, unit or `ReadWritePaths` changed. A
+symlink would have put the real target outside `ReadWritePaths` and broken
+writes in every hardened unit; the same argument covers Redis's AppArmor
+profile, which is path-based.
+
+The point is failure isolation, not capacity: a full data volume now stops
+collection instead of taking the OS, sshd, Redis and the dashboard with it.
+Also capped journald (`SystemMaxUse=200M`) — 1.4G of journal lives in
+`/var/log`, which the data volume does *not* cover. Root ended at **36%**,
+`/data` at 21%.
+
+**Gap**: `install.sh` does not create this layout. A rebuilt host would put
+everything back on root. Either teach the installer about the data volume
+or carry the layout into the Proxmox migration explicitly — where the same
+split (system vs collected data) is worth reproducing.
+
 ### CloudFront access logs to S3
 
 **Status**: Sonar hotspot `cloudformation:S6258` marked Safe

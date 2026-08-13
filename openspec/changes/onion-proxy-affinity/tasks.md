@@ -27,8 +27,11 @@
 
 ## 3. Run the experiment
 
-- [ ] 3.0 **BLOCKER — disk.** Checked 2026-08-11: `/` is **87% full, 2.0G
-      free** of 15G, with everything parked. Breakdown: exports 3.4G (1,955
+- [x] 3.0 **Disk — resolved 2026-08-13.** Root is at 36% (9.3G free) and
+      collected data now lives on its own 30G volume; see the storage entry
+      in `docs/follow-ups.md`. Original finding, kept because it is why the
+      run waited: `/` was **87% full, 2.0G free** of 15G, with everything
+      parked. Breakdown: exports 3.4G (1,955
       snapshots, deliberately frozen — that is the raw material for windows
       and archive backfill, do not prune), `data/crawl` 950M, journald 1.5G,
       propagation 818M, Redis `dump.rdb` 443M (frozen 2026-08-01), dead
