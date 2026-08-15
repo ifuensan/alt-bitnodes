@@ -44,20 +44,50 @@
       `growpart` + `resize2fs`, ~5 min, ~$1/month); it is already an open
       item in the Logseq backlog. Needs an AWS session — the local CLI
       session is expired.
-- [ ] 3.1 Deploy deliberately (this restarts the whole Tor pool) with the
+- [x] 3.1 Deploy deliberately (this restarts the whole Tor pool) with the
       split already in place, `i2p = True` (full stack, decided 2026-08-12),
       and the sampler running
-- [ ] 3.2 Let it run ~24h; confirm both arms reach their plateau
-- [ ] 3.3 Compare post-plateau egress **per carried connection** per arm,
+- [x] 3.2 Let it run ~24h; confirm both arms reach their plateau
+- [x] 3.3 Compare post-plateau egress **per carried connection** per arm,
       handshake counters from the heartbeat lines, and check the global onion
       count did not drop
-- [ ] 3.4 Watch Tor memory and whether `MaxClientCircuitsPending 512` starts
+- [x] 3.4 Watch Tor memory and whether `MaxClientCircuitsPending 512` starts
       limiting the treated arm
 
 ## 4. Close the loop
 
-- [ ] 4.1 Record the numbers in `docs/follow-ups.md` (or a postmortem-style
-      note if the result is surprising enough to deserve one)
+- [x] 4.1 Numbers recorded below and in the Logseq journal (2026-08-15).
+
+## Result (run 2026-08-13 19:04 → 2026-08-15 09:28 UTC, 25.4h post-plateau,
+## 11,832 samples)
+
+Treated (`MaxCircuitDirtiness 3600`) vs control (600), per arm:
+
+| | egress | sustained conns | bytes/conn/min |
+|---|---|---|---|
+| treated | 28.65 MB/min | ~2,435 | 12,338 |
+| control | 35.52 MB/min | ~5,764 | 6,462 |
+| delta | **-19.4%** | **-57.8%** | **+90.9%** |
+
+Spread within each arm is tight (treated 6.96-7.30 MB/min and 563-677
+conns; control 8.73-8.95 and 1,357-1,479), so this is an arm effect, not a
+sick daemon.
+
+**b10c's mechanism is confirmed and it is large.** From Tor's own heartbeat
+counters over one hour, a treated daemon opened **1,747 new outgoing
+connections/h against the control's 4,686 — 63% less handshake churn** —
+and sent 320 MB/h against 410. What sinks it is the price: holding circuits
+dirty for an hour leaves ~6,000-6,400 circuits open per treated daemon
+versus ~3,900, and that occupancy throttles throughput. Each treated daemon
+carries less than half the crawler's streams.
+
+**Not adopted as-is**: the churn saving is real but the throughput loss
+outweighs it about twofold per unit of work.
+
+**Open question worth a second run**: if the treated ceiling is circuit
+accounting, an intermediate value (1200-1800s) might keep most of the 63%
+churn saving without the throttling — possibly with a raised
+`MaxClientCircuitsPending` in the treated arm only.
 - [ ] 4.2 Decide the end state: keep a longer `MaxCircuitDirtiness`, or tune
       the revisit cadence below the dirtiness window instead
 - [ ] 4.3 Reply to b10c in the BNOC thread with the measurement — the lead
