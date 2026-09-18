@@ -40,7 +40,7 @@
 - [x] 0.8 `docs/follow-ups.md`: migration entry → "In progress, see
       `openspec/changes/migrate-to-selfhosted-proxmox`"; note that the
       `install.sh` data-volume gap is closed by 0.3.
-- [ ] 0.9 Before merging, on the EC2: `grep /data /etc/fstab` and confirm
+- [x] 0.9 Before merging, on the EC2: `grep /data /etc/fstab` and confirm
       the four binds are written as `/data/<x> <dst> ...` (the installer's
       duplicate check keys on `src dst`); confirm `parked-units` lists
       `bitnodes.service`, `i2pd.service`, `tor.service` and the `tor@*`
@@ -49,6 +49,9 @@
       are byte-identical (`onion`/`i2p` were already `True`), the parked
       crawler is untouched, CloudWatch still installs. Confirm with the
       smoke test and `systemctl is-active bitnodes` → inactive.
+      *Done 2026-09-18: commit 0944b26, run 35383106283 green; on the EC2
+      fstab still 5 lines, `/etc/alt-bitnodes` root:ubuntu, crawler/i2pd/
+      tor pool inactive, installer ended `edge=cloudfront, crawler-profile=full`.*
 
 ## 1. Proxmox VM
 
