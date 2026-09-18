@@ -55,24 +55,33 @@
 
 ## 1. Proxmox VM
 
-- [ ] 1.1 Create the VM from the Ubuntu 24.04 cloud image: 8 vCPU (host
+- [x] 1.1 Create the VM from the Ubuntu 24.04 cloud image: 8 vCPU (host
       type), 16 GiB RAM, `scsi0` 20 GiB root, `scsi1` 80 GiB data, VirtIO
       NIC on the LAN bridge, static IP via cloud-init, SSH key for the
       operator, `qemu-guest-agent`, `serial0` console.
-- [ ] 1.2 Inside: `apt update && apt full-upgrade`, `mkfs.ext4 -L data
+- [x] 1.2 Inside: `apt update && apt full-upgrade`, `mkfs.ext4 -L data
       /dev/sdb`, `/etc/fstab` line `LABEL=data /data ext4 defaults,nofail 0 2`,
       `mount -a`. Time sync (`timedatectl`), `ufw default deny incoming`,
       `ufw allow from <LAN>/24 to any port 22`, `ufw enable`.
-- [ ] 1.3 Kernel/limits for ~10k sockets: `fs.file-max`, `net.ipv4.ip_local_port_range
+- [x] 1.3 Kernel/limits for ~10k sockets: `fs.file-max`, `net.ipv4.ip_local_port_range
       = 10240 65000`, `net.core.somaxconn` in `/etc/sysctl.d/90-crawler.conf`.
       (`LimitNOFILE=65535` is already in the unit.)
-- [ ] 1.4 Write the markers:
+- [x] 1.4 Write the markers:
       `echo cloudflare | sudo tee /etc/alt-bitnodes/edge`,
       `echo clearnet | sudo tee /etc/alt-bitnodes/crawler-profile`
       (create `/etc/alt-bitnodes` 0750 root:root first).
+      *1.1–1.4 done 2026-09-18: VM 114 `alt-bitnodes` on frodo (Xeon Gold
+      6240, PVE 9.2), Ubuntu 24.04.5 cloud image, 192.168.1.165, user
+      `ubuntu`, scsi0 20G + scsi1 80G on local-lvm, `/data` ext4 label
+      `data`, ufw LAN-only SSH, sysctl, markers `cloudflare` + `clearnet`.*
 - [ ] 1.5 Proxmox side: backup job for the VM (vzdump, weekly, root disk
       only — `/data` is reproducible from the archive and the EC2 snapshot),
       start-on-boot, and a note in the Proxmox host docs.
+      *Partial 2026-09-18: `onboot=1` and `scsi1 backup=0` set. Not added to
+      the vzdump job: frodo's root (`local`) is at 94% with 6 GB free and the
+      existing nightly job (VMs 104+108, keep-last=2) has no dump newer than
+      2026-09-11 for 108 or 2026-08-20 for 104 — it is already failing for
+      lack of space. Free space or move dumps to another storage first.*
 
 ## 2. Cloudflare
 
