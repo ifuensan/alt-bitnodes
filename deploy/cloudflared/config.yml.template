@@ -1,0 +1,28 @@
+# Cloudflare Tunnel ingress for alt-bitnodes. Rendered by deploy/install.sh
+# into /etc/cloudflared/config.yml from /etc/alt-bitnodes/cloudflared.env:
+#   __TUNNEL_ID__   -> TUNNEL_ID   (from `cloudflared tunnel create`)
+#   __PUBLIC_HOST__ -> PUBLIC_HOST (pesquisa.hacknodes.xyz)
+#   __SSH_HOST__    -> SSH_HOST    (ssh.hacknodes.xyz, behind Cloudflare Access)
+#
+# The tunnel is the only path into the host: nginx listens on loopback and
+# sshd is not exposed on any public port. Rules match top to bottom; the
+# last one must be the catch-all or cloudflared refuses to start.
+tunnel: __TUNNEL_ID__
+credentials-file: /etc/cloudflared/__TUNNEL_ID__.json
+
+# Reconnect aggressively; a home uplink drops more often than a datacentre.
+retries: 10
+grace-period: 30s
+
+ingress:
+  - hostname: __PUBLIC_HOST__
+    service: http://127.0.0.1:80
+    originRequest:
+      # nginx keeps /mcp/ SSE sessions open for up to 1h.
+      connectTimeout: 10s
+      keepAliveTimeout: 90s
+      noHappyEyeballs: true
+      httpHostHeader: __PUBLIC_HOST__
+  - hostname: __SSH_HOST__
+    service: ssh://127.0.0.1:22
+  - service: http_status:404

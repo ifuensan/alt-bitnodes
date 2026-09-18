@@ -9,7 +9,10 @@ see `_bmad-output/planning-artifacts/`.
 
 ### Migrate production off AWS to self-hosted Proxmox
 
-**Status**: Decided 2026-08-01. Driver: egress cost — the scaled
+**Status**: In progress since 2026-09-18 — change
+`openspec/changes/migrate-to-selfhosted-proxmox/` (Cloudflare Tunnel edge,
+VM on the existing Proxmox, clearnet profile first; overlays return with
+the ONT-bridge work). Decided 2026-08-01. Driver: egress cost — the scaled
 crawler pushes ~356 GB/day (>99% Tor/I2P overlay machinery, ~0.1%
 Bitcoin protocol), ~$22/day at AWS transfer rates (~$660/month). See
 `docs/postmortems/2026-08-01-egress-cost-anomaly-false-positive.md`
@@ -152,7 +155,7 @@ Also capped journald (`SystemMaxUse=200M`) — 1.4G of journal lives in
 `/var/log`, which the data volume does *not* cover. Root ended at **36%**,
 `/data` at 21%.
 
-**Gap**: `install.sh` does not create this layout. A rebuilt host would put
+**Gap** (closed by `migrate-to-selfhosted-proxmox` task 0.3): `install.sh` does not create this layout. A rebuilt host would put
 everything back on root. Either teach the installer about the data volume
 or carry the layout into the Proxmox migration explicitly — where the same
 split (system vs collected data) is worth reproducing.

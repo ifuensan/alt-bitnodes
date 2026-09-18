@@ -1,9 +1,187 @@
-# Deploy alt-bitnodes on AWS EC2
+# Deploy alt-bitnodes
 
 Single-node deployment that runs the bitnodes crawler stack and the
-alt-bitnodes dashboard on the same Ubuntu 24.04 LTS (ARM64) instance.
+alt-bitnodes dashboard on one Ubuntu 24.04 LTS host. Production is a VM on
+the home Proxmox host behind a Cloudflare Tunnel; the AWS EC2 procedure it
+replaced is kept below under *Legacy: AWS EC2* until that instance is
+terminated (see `openspec/changes/migrate-to-selfhosted-proxmox/`).
 
-## 1. Create the EC2 instance
+## Deploy on a Proxmox VM (Cloudflare Tunnel edge)
+
+### 1. The VM
+
+| item | value | why |
+|---|---|---|
+| image | Ubuntu 24.04 cloud image | cloud-init for user/key/IP |
+| CPU / RAM | 8 vCPU (type `host`), 16 GiB | same as the c7g.2xlarge the tuning was calibrated on |
+| `scsi0` | 20 GiB | root: OS, venvs, journal (capped at 200M) |
+| `scsi1` | 80 GiB | `/data`: exports, archive, Redis, logs — a full data disk stops collection, not the OS |
+| NIC | VirtIO on the LAN bridge, static IP via cloud-init | the tunnel is outbound-only; no port forward |
+| extras | `qemu-guest-agent`, `serial0`, start on boot, weekly vzdump of root | |
+
+Inside the VM, once:
+
+```bash
+sudo apt update && sudo apt full-upgrade -y
+sudo mkfs.ext4 -L data /dev/sdb
+echo 'LABEL=data /data ext4 defaults,nofail 0 2' | sudo tee -a /etc/fstab
+sudo mkdir -p /data && sudo mount -a
+
+# Nothing inbound except LAN SSH. The web path and CI SSH come through the tunnel.
+sudo ufw default deny incoming
+sudo ufw allow from 192.168.1.0/24 to any port 22    # your LAN
+sudo ufw enable
+
+# ~10k sockets for the clearnet profile; the unit already sets LimitNOFILE.
+sudo tee /etc/sysctl.d/90-crawler.conf >/dev/null <<'EOT'
+fs.file-max = 262144
+net.ipv4.ip_local_port_range = 10240 65000
+net.core.somaxconn = 4096
+EOT
+sudo sysctl --system
+```
+
+### 2. Marker files
+
+`install.sh` reads its host-specific switches from files, never from the
+environment (the deploy runs it over SSH with none). Absent files mean the
+legacy EC2 behaviour, so write both **before** the first run:
+
+```bash
+sudo install -d -m 0750 /etc/alt-bitnodes
+echo cloudflare | sudo tee /etc/alt-bitnodes/edge
+echo clearnet   | sudo tee /etc/alt-bitnodes/crawler-profile
+```
+
+| file | values | effect |
+|---|---|---|
+| `edge` | `cloudflare` \| `cloudfront` | nginx template (loopback + `CF-Connecting-IP` vs origin gate), cloudflared vs CloudWatch agent |
+| `crawler-profile` | `clearnet` \| `full` | `onion`/`i2p` in both crawler confs; Tor pool + i2pd provisioned but stopped under `clearnet` |
+| `parked-units` | unit names | never enabled/started by a deploy, whatever the profile |
+
+`clearnet` is the profile the stock Digi router can carry (~6.5k held
+sessions validated clean, household degrades between 7k and 10k). Switch
+to `full` only after the ONT bridge + OPNsense are in and re-tested at 40k.
+
+### 3. Cloudflare
+
+1. Add `hacknodes.xyz` to Cloudflare; recreate every record **DNS-only**;
+   move the nameservers at the registrar; wait for *Active*.
+2. On the VM:
+   ```bash
+   curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+   echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+   sudo apt update && sudo apt install -y cloudflared
+   cloudflared tunnel login                 # browser auth, writes ~/.cloudflared/cert.pem
+   cloudflared tunnel create alt-bitnodes   # prints the tunnel id, writes ~/.cloudflared/<id>.json
+   sudo install -d -m 0755 /etc/cloudflared
+   sudo install -m 0600 ~/.cloudflared/<id>.json /etc/cloudflared/<id>.json
+   ```
+3. DNS records (proxied) for the public hostnames:
+   ```bash
+   cloudflared tunnel route dns alt-bitnodes pesquisa.hacknodes.xyz   # or pesquisa-next while validating
+   cloudflared tunnel route dns alt-bitnodes ssh.hacknodes.xyz
+   ```
+4. Cache rule (Caching → Cache Rules): *Bypass cache* when URI path starts
+   with `/api/` or `/mcp/`. Static assets keep the defaults; their URLs
+   carry `?v=<commit>` so a deploy never serves a stale file.
+5. Zero Trust → Access → Applications: self-hosted app for
+   `ssh.hacknodes.xyz`, policy *Service Auth* with a new **service token**.
+   Keep the client id/secret for the GitHub secrets.
+6. Tell the installer about the tunnel:
+   ```bash
+   sudo tee /etc/alt-bitnodes/cloudflared.env >/dev/null <<'EOT'
+   TUNNEL_ID=<id>
+   PUBLIC_HOST=pesquisa.hacknodes.xyz
+   SSH_HOST=ssh.hacknodes.xyz
+   EOT
+   ```
+   The ingress rules themselves are in the repo
+   (`deploy/cloudflared/config.yml.template`); the installer renders and
+   restarts `cloudflared` only when they change.
+
+### 4. Data from the previous host (migration only)
+
+The VM pulls; it is the side without a public address. Skip
+`unique-nodes.json` (retired metric). Do this before the first
+`install.sh` so Redis starts on the copied RDB.
+
+```bash
+sudo mkdir -p /data/{bitnodes-data/export,alt-bitnodes-data,redis}
+sudo rsync -aH --info=progress2 ubuntu@<old-host>:/data/bitnodes-data/export/ /data/bitnodes-data/export/
+sudo rsync -aH --exclude unique-nodes.json ubuntu@<old-host>:/data/alt-bitnodes-data/ /data/alt-bitnodes-data/
+sudo rsync -a ubuntu@<old-host>:/data/redis/dump.rdb /data/redis/     # after `redis-cli save` there
+sudo chown -R redis:redis /data/redis
+for f in mcp-token research-token; do
+  ssh ubuntu@<old-host> "sudo cat /etc/alt-bitnodes/$f" | sudo tee /etc/alt-bitnodes/$f >/dev/null
+done
+ssh ubuntu@<old-host> 'cat ~/bitnodes/geoip/.maxmind_license_key' > /tmp/mm && mkdir -p ~/bitnodes/geoip && install -m 0600 /tmp/mm ~/bitnodes/geoip/.maxmind_license_key
+```
+
+Same tokens on the new host means every MCP client and the research page
+keep working across the cutover.
+
+### 5. First install and checks
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/ifuensan/alt-bitnodes/main/deploy/install.sh
+sudo bash install.sh
+```
+
+Expect, in order: apt + Redis, Tor pool provisioned **and stopped**, i2pd
+installed **and stopped**, pyenv, both repos, `/data` binds
+(`findmnt ~/bitnodes/data`), units, nginx on `127.0.0.1:80`, `cloudflared`
+active, and the final line `Done (edge=cloudflare, crawler-profile=clearnet)`.
+
+```bash
+grep -E '^(onion|i2p) ' ~/bitnodes/conf/crawl.f9beb4d9.conf    # both False
+systemctl is-active bitnodes alt-bitnodes alt-bitnodes-mcp cloudflared
+systemctl is-active tor@bitnodes1 i2pd                            # inactive
+ss -ltn                                                            # 22 on LAN, everything else on 127.0.0.1
+redis-cli scard up                                                 # climbing
+curl -fsSI https://pesquisa.hacknodes.xyz/                         # 200, Cloudflare cert
+curl -sI  https://pesquisa.hacknodes.xyz/api/v1/snapshots/latest/ | grep -i cf-cache-status   # DYNAMIC/BYPASS
+```
+
+First day: sample `ss -s` every minute and watch the household. If
+established sessions trend past ~6.8k, lower `workers` in
+`ping.f9beb4d9.conf` **in `install.sh`** (it is the snapshot ceiling and
+the installer re-renders it) and re-run.
+
+### 6. Enabling the overlays later
+
+Only after the ONT bridge + own router are in place and re-tested:
+
+```bash
+echo full | sudo tee /etc/alt-bitnodes/crawler-profile
+sudo bash ~/alt-bitnodes/deploy/install.sh   # starts tor@*, i2pd; restarts the crawler once
+```
+
+Onion takes ~13 h to plateau; I2P bootstraps from the shipped seeds.
+
+### 7. CI deploys through Cloudflare Access
+
+The workflow SSHes to `ssh.hacknodes.xyz` with
+`ProxyCommand cloudflared access ssh --hostname %h` and the service token.
+Secrets in the `PRO` environment: `DEPLOY_SSH_KEY`, `DEPLOY_HOST`,
+`DEPLOY_USER`, `DEPLOY_HOST_KEY` (`ssh-keyscan <vm-lan-ip>` run from the
+LAN — the runner cannot keyscan through the proxy), `CF_ACCESS_CLIENT_ID`,
+`CF_ACCESS_CLIENT_SECRET`.
+
+### Rollback during the transition
+
+While the CloudFront stack still exists, cutover is reversible by pointing
+the `pesquisa` CNAME back at `dxxxx.cloudfront.net` (DNS-only). After the
+stack is deleted there is no AWS to go back to; the rollback is the VM's
+vzdump plus the final EBS snapshot.
+
+---
+
+## Legacy: AWS EC2
+
+Kept for the transition. Nothing below applies to the Proxmox host.
+
+### 1. Create the EC2 instance
 
 Recommended sizing: **c7g.2xlarge** (16 GB RAM, 8 vCPU, ARM Graviton3).
 Pricing in us-east-1 ≈ $196/month on-demand.
@@ -48,7 +226,7 @@ aws ec2 run-instances \
 
 Note the public DNS / IP that AWS returns.
 
-## 2. Run the installer
+### 2. Run the installer
 
 ```bash
 ssh -i ~/.ssh/your-key.pem ubuntu@<EC2_PUBLIC_DNS>
@@ -70,7 +248,7 @@ The installer:
 
 Build of CPython takes ~3-5 min on t4g.medium.
 
-## 3. Verify
+### 3. Verify
 
 ```bash
 systemctl status bitnodes alt-bitnodes
@@ -82,7 +260,7 @@ ls ~/bitnodes/data/export/f9beb4d9/ # JSON snapshots
 
 The first complete export appears after `snapshot_delay = 600s`.
 
-## 4. Open the dashboard
+### 4. Open the dashboard
 
 Dashboard listens on `127.0.0.1:8000` only. Open via SSH tunnel:
 
@@ -92,21 +270,21 @@ ssh -i ~/.ssh/your-key.pem -N -L 8000:127.0.0.1:8000 ubuntu@<EC2_PUBLIC_DNS>
 
 Then http://localhost:8000 in your browser.
 
-## 5. Updates
+### 5. Updates
 
 ```bash
 ssh ubuntu@<host>
 sudo bash ~/alt-bitnodes/deploy/install.sh   # idempotent: pulls both repos, restarts services
 ```
 
-## 6. Stop / start
+### 6. Stop / start
 
 ```bash
 sudo systemctl stop  bitnodes alt-bitnodes
 sudo systemctl start bitnodes alt-bitnodes
 ```
 
-## MaxMind GeoLite2 refresh
+### MaxMind GeoLite2 refresh
 
 The crawler resolves country, ASN, and city for each peer via MaxMind GeoLite2 databases under `~/bitnodes/geoip/`. The repo ships a recent snapshot of the three `.mmdb` files, but they go stale (MaxMind republishes Tue/Fri). A weekly `geoip-update.timer` is installed; it only runs if a license key is present.
 
@@ -127,7 +305,7 @@ ls -la ~/bitnodes/geoip/*.mmdb              # mtime should refresh
 
 The timer runs every Wednesday at 06:00 with up to 30 min jitter. `Persistent=true` reruns missed cycles when the box was off. To check the last run: `journalctl -u geoip-update.service`.
 
-## API smoke test
+### API smoke test
 
 After deploy, hit a few endpoints:
 
@@ -139,14 +317,14 @@ curl -s http://localhost:8000/api/v1/groups/by-ip/        | jq '.results[:5]'
 curl -s http://localhost:8000/api/v1/snapshots/latest/    | jq '.total_nodes'
 ```
 
-## Public edge (CloudFront + nginx)
+### Public edge (CloudFront + nginx)
 
 Until now the dashboard lives on `127.0.0.1:8000` and is reachable only via SSH
 tunnel. To expose it publicly the path is **CloudFront → EC2:80 (nginx) →
 uvicorn:8000**: TLS lives on CloudFront, the EC2 only accepts traffic from
 CloudFront IPs that carry the right secret header.
 
-### Prerequisites
+#### Prerequisites
 
 - AWS CLI configured with permissions for `acm:*`, `cloudfront:*`,
   `ec2:AuthorizeSecurityGroupIngress`, `ec2:RevokeSecurityGroupIngress`,
@@ -156,7 +334,7 @@ CloudFront IPs that carry the right secret header.
 - Access to the external DNS provider for `hacknodes.xyz` (Namecheap/GoDaddy
   /etc.) so you can create CNAME and A records by hand.
 
-### One-time bootstrap
+#### One-time bootstrap
 
 ```bash
 # 1. Generate the shared origin-auth secret locally.
@@ -190,7 +368,7 @@ aws cloudformation describe-stacks --region us-east-1 \
   --query 'Stacks[0].Outputs'
 ```
 
-### DNS records to create in the external provider
+#### DNS records to create in the external provider
 
 | Type  | Name (host)                          | Value                              | Purpose                       |
 |-------|--------------------------------------|------------------------------------|-------------------------------|
@@ -201,7 +379,7 @@ aws cloudformation describe-stacks --region us-east-1 \
 The ACM CNAME comes from step 3 above. The CloudFront hostname comes from the
 stack output `CloudFrontDomain`.
 
-### Push the secret to the EC2
+#### Push the secret to the EC2
 
 ```bash
 SECRET=$(cat /tmp/origin-secret)
@@ -216,7 +394,7 @@ configures nginx with the secret already in place. If you skip this step
 instance, but you'd then need to read it back and update the CloudFormation
 parameter to match.
 
-### Smoke tests after deploy
+#### Smoke tests after deploy
 
 ```bash
 SECRET=$(cat /tmp/origin-secret)
@@ -241,7 +419,7 @@ done | sort | uniq -c
 
 Once everything verifies, `rm /tmp/origin-secret`.
 
-### Rotating the OriginAuthSecret
+#### Rotating the OriginAuthSecret
 
 1. Generate a new secret locally: `NEW=$(openssl rand -hex 32)`.
 2. Update the CloudFormation stack (CloudFront swaps the header value):
@@ -257,7 +435,7 @@ Once everything verifies, `rm /tmp/origin-secret`.
    the nginx config with the new secret and reloads). Brief 403s are possible
    while CloudFront propagates the new header.
 
-### Rollback
+#### Rollback
 
 ```bash
 # Public layer

@@ -1,0 +1,84 @@
+# alt-bitnodes reverse proxy behind a Cloudflare Tunnel. TLS lives on
+# Cloudflare; cloudflared on this host forwards to this server over
+# loopback, so nothing here is reachable from the LAN or the Internet and
+# no shared-secret gate is needed (the tunnel is the only path in).
+#
+# Template substitutions performed by deploy/install.sh:
+#   __SERVER_NAME__ -> public hostname + "_" catch-all
+#
+# Everything below the real-IP block is identical to the CloudFront-era
+# template (alt-bitnodes.conf.template): rate limiting, security headers,
+# proxy settings, the /mcp/ SSE handling and its Host rewrite.
+
+# The client address arrives in CF-Connecting-IP, set by Cloudflare and
+# relayed by cloudflared. Trust it only from the local cloudflared so
+# rate limiting and access logs key on the real client.
+set_real_ip_from 127.0.0.1;
+real_ip_header CF-Connecting-IP;
+
+server {
+    listen 127.0.0.1:80 default_server;
+    server_name __SERVER_NAME__;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    client_max_body_size 1m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_read_timeout 30s;
+        proxy_connect_timeout 5s;
+    }
+
+    location /api/ {
+        limit_req zone=api burst=40 nodelay;
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_read_timeout 30s;
+        proxy_connect_timeout 5s;
+    }
+
+    # MCP Streamable HTTP transport. The MCP server (alt-bitnodes-mcp.service)
+    # validates Authorization: Bearer <token> itself; nginx only rate-limits
+    # abusive clients. Buffering is disabled and timeouts raised because MCP
+    # responses stream Server-Sent Events that can stay open for tens of
+    # minutes. Note Cloudflare's proxy closes a response idle for 100 s;
+    # clients reconnect, as they already do on the 1h cap below.
+    #
+    # proxy_pass target deliberately ends without a trailing slash: FastMCP
+    # mounts at "/mcp" (no slash) and redirects 307 to "/mcp" when reached
+    # via "/mcp/". Forwarding directly to "/mcp" skips that redirect, which
+    # would otherwise leak an internal 127.0.0.1 Location header.
+    location /mcp/ {
+        limit_req zone=api burst=20 nodelay;
+        proxy_pass http://127.0.0.1:8001/mcp;
+        proxy_http_version 1.1;
+        # MCP SDK enforces a DNS-rebinding check that only accepts Host
+        # headers in a small allow-list (127.0.0.1, localhost) by default.
+        # Forward the loopback host to keep it happy; preserve the real
+        # public hostname for the app to read from X-Forwarded-Host.
+        proxy_set_header Host 127.0.0.1:8001;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+        proxy_connect_timeout 5s;
+    }
+}

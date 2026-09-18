@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Idempotent installer for Ubuntu 24.04 LTS (ARM64 / Graviton) on AWS EC2.
+# Idempotent installer for Ubuntu 24.04 LTS. Host-agnostic: it ran on an
+# AWS EC2 (ARM64 / Graviton) and now targets a VM on the home Proxmox host
+# (x86-64); everything host-specific is selected by marker files under
+# /etc/alt-bitnodes (see EDGE_MODE / CRAWLER_PROFILE / PARKED_UNITS_FILE).
 # Sets up: pyenv + Python 3.12.4, redis-server, ifuensan/bitnodes (crawler),
-# ifuensan/alt-bitnodes (dashboard), systemd units.
+# ifuensan/alt-bitnodes (dashboard), Tor pool, i2pd, nginx, the public edge
+# (Cloudflare Tunnel or, legacy, CloudFront origin), systemd units.
 #
 # Usage (as the ubuntu user):
 #   curl -fsSL https://raw.githubusercontent.com/ifuensan/alt-bitnodes/main/deploy/install.sh | bash
@@ -75,6 +79,48 @@ is_parked() {
   grep -qxF "$1" "${PARKED_UNITS_FILE}"
 }
 
+# Host-specific switches live in files, for the same reason parked-units
+# does: the deploy runs this script over SSH with no environment, so an
+# env-only knob silently takes its default on every deploy. An ABSENT file
+# means "the behaviour of the host that predates the switch", so a push
+# during a transition cannot change an existing host.
+#
+#   /etc/alt-bitnodes/edge             cloudfront (legacy EC2) | cloudflare
+#   /etc/alt-bitnodes/crawler-profile  full | clearnet
+#
+# Provisioning a new host writes both before the first run:
+#   echo cloudflare | sudo tee /etc/alt-bitnodes/edge
+#   echo clearnet   | sudo tee /etc/alt-bitnodes/crawler-profile
+read_marker() {
+  local file="/etc/alt-bitnodes/$1" default="$2" value
+  if [[ -s "${file}" ]]; then
+    value="$(tr -d '[:space:]' < "${file}")"
+    printf '%s' "${value:-${default}}"
+  else
+    printf '%s' "${default}"
+  fi
+}
+EDGE_MODE="$(read_marker edge cloudfront)"
+CRAWLER_PROFILE="$(read_marker crawler-profile full)"
+case "${EDGE_MODE}" in cloudfront|cloudflare) ;; *) echo "bad /etc/alt-bitnodes/edge: ${EDGE_MODE}"; exit 1 ;; esac
+case "${CRAWLER_PROFILE}" in full|clearnet) ;; *) echo "bad /etc/alt-bitnodes/crawler-profile: ${CRAWLER_PROFILE}"; exit 1 ;; esac
+
+# Overlay daemons (Tor pool, tor@default, i2pd) run only under the `full`
+# profile. Under `clearnet` they are provisioned but kept disabled and
+# stopped, so switching profiles is a marker edit plus a re-run. Parking
+# still wins under `full`.
+enable_overlay_unit() {
+  local unit="$1"; shift
+  if [[ "${CRAWLER_PROFILE}" == "clearnet" ]]; then
+    if systemctl is-enabled --quiet "${unit}" 2>/dev/null || systemctl is-active --quiet "${unit}" 2>/dev/null; then
+      log "${unit}: crawler profile is clearnet; disabling and stopping"
+      systemctl disable --now "${unit}" 2>/dev/null || true
+    fi
+    return 0
+  fi
+  enable_unit "${unit}" "$@"
+}
+
 # systemctl enable [--now] that respects parked units.
 enable_unit() {
   local unit="$1"; shift
@@ -95,7 +141,59 @@ install_apt_packages() {
     libxmlsec1-dev libffi-dev liblzma-dev curl wget git ca-certificates \
     redis-server sqlite3 tor nginx
   systemctl enable --now redis-server
-  enable_unit tor.service --now
+  enable_overlay_unit tor.service --now
+}
+
+# Collected data lives on its own volume when the host has one (the
+# 2026-08-13 layout, see docs/follow-ups.md). Bind mounts, not symlinks:
+# the units run ProtectHome=read-only with ReadWritePaths under /home and
+# the crawler confs use relative paths, so every path must stay identical.
+# The point is failure isolation -- a full data disk stops collection, not
+# the OS. Without a /data mountpoint (a dev box) this warns and continues.
+setup_data_volume() {
+  if ! mountpoint -q /data; then
+    echo "WARNING: /data is not a mountpoint; collected data will live on the root filesystem" >&2
+    return 0
+  fi
+  log "Provisioning /data layout"
+  local d
+  for d in bitnodes-data bitnodes-log alt-bitnodes-data attic; do
+    install -d -o "${INSTALL_USER}" -g "${INSTALL_USER}" "/data/${d}"
+  done
+  install -d -o redis -g redis -m 0750 /data/redis
+
+  sudo -u "${INSTALL_USER}" mkdir -p "${CRAWLER_DIR}/data" "${CRAWLER_DIR}/log" "${DASHBOARD_DIR}/data"
+
+  # One fstab line per bind, added only if no line already maps src -> dst
+  # (whatever its options), and a mount only if dst is not a mountpoint yet,
+  # so a hand-built layout (the EC2) is neither duplicated nor stacked.
+  # Redis is already running from install_apt_packages: its first bind must
+  # move the live RDB, not hide it under the mount.
+  local src dst
+  while read -r src dst; do
+    if ! grep -qE "^${src}[[:space:]]+${dst}[[:space:]]" /etc/fstab; then
+      printf '%s %s none bind,nofail 0 0\n' "${src}" "${dst}" >> /etc/fstab
+    fi
+    if ! mountpoint -q "${dst}"; then
+      if [[ "${dst}" == /var/lib/redis ]]; then
+        log "Moving Redis data to /data/redis"
+        systemctl stop redis-server
+        if [[ -f /var/lib/redis/dump.rdb && ! -f /data/redis/dump.rdb ]]; then
+          cp -a /var/lib/redis/. /data/redis/
+        fi
+        mount "${dst}"
+        systemctl start redis-server
+      else
+        mount "${dst}"
+      fi
+    fi
+  done <<EOF_BINDS
+/data/redis /var/lib/redis
+/data/bitnodes-data ${CRAWLER_DIR}/data
+/data/bitnodes-log ${CRAWLER_DIR}/log
+/data/alt-bitnodes-data ${DASHBOARD_DIR}/data
+EOF_BINDS
+  systemctl daemon-reload
 }
 
 setup_i2pd() {
@@ -105,7 +203,8 @@ setup_i2pd() {
     apt-get update -qq
     apt-get install -y -qq i2pd
   fi
-  enable_unit i2pd.service --now
+  enable_overlay_unit i2pd.service --now
+  [[ "${CRAWLER_PROFILE}" == "clearnet" ]] && return
   is_parked i2pd.service && return
   # SAM is enabled by default on 127.0.0.1:7656 in current i2pd. Verify with
   # a bounded wait; warn-only because I2P is a best-effort ring and a broken
@@ -215,7 +314,7 @@ MaxCircuitDirtiness ${TOR_DIRTINESS_VALUE}"
       # Full restart, not reload: also clears degraded guard/circuit state.
       systemctl try-restart "tor@${name}" 2>/dev/null || true
     fi
-    enable_unit "tor@${name}.service" --now
+    enable_overlay_unit "tor@${name}.service" --now
   done
 
   # Same treatment for the default instance (SocksPort 9050): it shares the
@@ -223,6 +322,11 @@ MaxCircuitDirtiness ${TOR_DIRTINESS_VALUE}"
   if ! grep -q "^# alt-bitnodes crawler tuning" /etc/tor/torrc; then
     printf '\n# alt-bitnodes crawler tuning\n%s\n' "${tor_opts}" >> /etc/tor/torrc
     systemctl try-restart tor@default 2>/dev/null || true
+  fi
+  # Under `full` tor.service owns tor@default, exactly as before this knob
+  # existed; only `clearnet` has to act on it explicitly.
+  if [[ "${CRAWLER_PROFILE}" == "clearnet" ]]; then
+    enable_overlay_unit tor@default.service
   fi
 }
 
@@ -320,9 +424,21 @@ setup_crawler() {
     -e "s|^workers = .*|workers = 2000|" \
     "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf"
 
+  # Network profile. `onion` and `i2p` are boolean gates in crawl.py and
+  # ping.py; under `clearnet` the crawler dials IPv4/IPv6 only and the
+  # overlay daemons stay down (enable_overlay_unit). Everything else --
+  # tor_proxies, sampling rates, the I2P seed file -- is rendered under both
+  # profiles so the switch is a marker edit plus a re-run. The conf change
+  # moves crawler_fingerprint, so the crawler restarts when the profile does.
+  local overlays=True
+  [[ "${CRAWLER_PROFILE}" == "clearnet" ]] && overlays=False
+  log "Crawler profile: ${CRAWLER_PROFILE} (onion/i2p = ${overlays})"
+  ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" onion "${overlays}"
+  ensure_conf_key "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf" onion "${overlays}"
+
   # I2P ring: dial .b32.i2p peers through the local i2pd SAM bridge.
   # ensure_conf_key because live conf files may predate these keys.
-  ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" i2p True
+  ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" i2p "${overlays}"
   ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" i2p_proxies 127.0.0.1:7656
   ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" i2p_peers_sampling_rate 100
   # Seed the I2P ring: clearnet peers rarely gossip .b32.i2p, so without
@@ -331,7 +447,7 @@ setup_crawler() {
   ensure_conf_key "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf" tor_proxy_affinity "${TOR_PROXY_AFFINITY}"
   ensure_conf_key "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf" tor_proxy_affinity "${TOR_PROXY_AFFINITY}"
 
-  ensure_conf_key "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf" i2p True
+  ensure_conf_key "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf" i2p "${overlays}"
   ensure_conf_key "${CRAWLER_DIR}/conf/ping.f9beb4d9.conf" i2p_proxies 127.0.0.1:7656
 
   sudo -u "${INSTALL_USER}" mkdir -p "${CRAWLER_DIR}/log" "${CRAWLER_DIR}/data"
@@ -450,7 +566,9 @@ bootstrap_origin_secret() {
   # (delete the file and re-run, then update the CloudFormation parameter).
   local dir=/etc/alt-bitnodes
   local file="${dir}/origin-auth.env"
-  install -d -m 0750 -o root -g root "${dir}"
+  # Group stays INSTALL_USER: the token files in this directory are read by
+  # the service user, and this now runs after generate_token_file.
+  install -d -m 0750 -o root -g "${INSTALL_USER}" "${dir}"
   if [[ ! -f "${file}" ]]; then
     log "Generating ${file}"
     umask 077
@@ -504,11 +622,19 @@ configure_nginx() {
     /etc/nginx/conf.d/alt-bitnodes-limits.conf
 
   local site=/etc/nginx/sites-available/alt-bitnodes
-  # Use a delimiter that won't appear in the secret (hex only) or hostnames.
-  sed \
-    -e "s|__SERVER_NAME__|origin.hacknodes.xyz pesquisa.hacknodes.xyz _|g" \
-    -e "s|__SECRET__|${ORIGIN_AUTH_SECRET}|g" \
-    "${DASHBOARD_DIR}/deploy/nginx/alt-bitnodes.conf.template" > "${site}"
+  if [[ "${EDGE_MODE}" == "cloudflare" ]]; then
+    # Tunnel edge: loopback only, no shared secret, real IP from cloudflared.
+    sed \
+      -e "s|__SERVER_NAME__|${PUBLIC_HOST} _|g" \
+      "${DASHBOARD_DIR}/deploy/nginx/alt-bitnodes-tunnel.conf.template" > "${site}"
+  else
+    # Legacy CloudFront origin. Use a delimiter that won't appear in the
+    # secret (hex only) or hostnames.
+    sed \
+      -e "s|__SERVER_NAME__|origin.hacknodes.xyz pesquisa.hacknodes.xyz _|g" \
+      -e "s|__SECRET__|${ORIGIN_AUTH_SECRET}|g" \
+      "${DASHBOARD_DIR}/deploy/nginx/alt-bitnodes.conf.template" > "${site}"
+  fi
   chmod 0644 "${site}"
 
   ln -sf "${site}" /etc/nginx/sites-enabled/alt-bitnodes
@@ -517,6 +643,57 @@ configure_nginx() {
   nginx -t
   systemctl enable nginx
   systemctl reload nginx
+}
+
+# Cloudflare Tunnel: cloudflared keeps outbound connections to Cloudflare's
+# edge and routes the public hostnames into nginx on loopback, so the host
+# opens no inbound port. Locally-managed tunnel: the ingress rules are
+# rendered from the repo template; the tunnel id and hostnames come from
+# /etc/alt-bitnodes/cloudflared.env (written at provisioning, see
+# deploy/README.md); the credentials JSON is created once by
+# `cloudflared tunnel create` and never touched here.
+CLOUDFLARED_ENV=/etc/alt-bitnodes/cloudflared.env
+
+load_cloudflared_env() {
+  [[ -f "${CLOUDFLARED_ENV}" ]] || { echo "missing ${CLOUDFLARED_ENV} (TUNNEL_ID, PUBLIC_HOST, SSH_HOST)"; exit 1; }
+  # shellcheck disable=SC1090
+  source "${CLOUDFLARED_ENV}"
+  : "${TUNNEL_ID:?TUNNEL_ID unset in ${CLOUDFLARED_ENV}}"
+  : "${PUBLIC_HOST:?PUBLIC_HOST unset in ${CLOUDFLARED_ENV}}"
+  : "${SSH_HOST:?SSH_HOST unset in ${CLOUDFLARED_ENV}}"
+}
+
+setup_cloudflared() {
+  log "Configuring Cloudflare Tunnel (${TUNNEL_ID}) for ${PUBLIC_HOST}"
+  if ! command -v cloudflared >/dev/null; then
+    install -d -m 0755 /usr/share/keyrings
+    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
+      -o /usr/share/keyrings/cloudflare-main.gpg
+    echo "deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main" \
+      > /etc/apt/sources.list.d/cloudflared.list
+    apt-get update -qq
+    apt-get install -y -qq cloudflared
+  fi
+  local creds="/etc/cloudflared/${TUNNEL_ID}.json"
+  [[ -f "${creds}" ]] || { echo "missing tunnel credentials ${creds}; run 'cloudflared tunnel create' first"; exit 1; }
+
+  local cfg=/etc/cloudflared/config.yml desired
+  desired="$(sed \
+    -e "s|__TUNNEL_ID__|${TUNNEL_ID}|g" \
+    -e "s|__PUBLIC_HOST__|${PUBLIC_HOST}|g" \
+    -e "s|__SSH_HOST__|${SSH_HOST}|g" \
+    "${DASHBOARD_DIR}/deploy/cloudflared/config.yml.template")"
+  if [[ ! -f "${cfg}" ]] || [[ "$(cat "${cfg}")" != "${desired}" ]]; then
+    printf '%s\n' "${desired}" > "${cfg}"
+    chmod 0644 "${cfg}"
+    systemctl try-restart cloudflared.service 2>/dev/null || true
+  fi
+  # `service install` writes the unit once; re-running it fails on an
+  # existing unit, so gate on the unit file.
+  if [[ ! -f /etc/systemd/system/cloudflared.service ]]; then
+    cloudflared --config "${cfg}" service install
+  fi
+  systemctl enable --now cloudflared.service
 }
 
 install_cloudwatch_agent() {
@@ -547,14 +724,24 @@ main() {
   install_pyenv
   setup_crawler
   setup_dashboard
-  bootstrap_origin_secret
+  setup_data_volume
   bootstrap_mcp_token
   bootstrap_research_token
   install_systemd_units
-  configure_nginx
-  install_cloudwatch_agent
+  case "${EDGE_MODE}" in
+    cloudflare)
+      load_cloudflared_env
+      configure_nginx
+      setup_cloudflared
+      ;;
+    cloudfront)
+      bootstrap_origin_secret
+      configure_nginx
+      install_cloudwatch_agent
+      ;;
+  esac
 
-  log "Done"
+  log "Done (edge=${EDGE_MODE}, crawler-profile=${CRAWLER_PROFILE})"
   echo
   echo "Verify:"
   echo "  systemctl status bitnodes alt-bitnodes alt-bitnodes-mcp"
