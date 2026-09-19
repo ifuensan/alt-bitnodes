@@ -85,13 +85,13 @@
 
 ## 2. Cloudflare
 
-- [ ] 2.1 Add `hacknodes.xyz` to a Cloudflare account; import/recreate every
+- [x] 2.1 Add `hacknodes.xyz` to a Cloudflare account; import/recreate every
       existing record (Namecheap export) **DNS-only**, including
       `pesquisa` CNAME → `dxxxx.cloudfront.net` and `origin` A → EC2 IP.
-- [ ] 2.2 Change nameservers at Namecheap; wait for "Active"; verify
+- [x] 2.2 Change nameservers at Namecheap; wait for "Active"; verify
       `dig +short pesquisa.hacknodes.xyz @1.1.1.1` still resolves to
       CloudFront and the site still returns 200.
-- [ ] 2.3 `cloudflared tunnel login` + `cloudflared tunnel create alt-bitnodes`
+- [x] 2.3 `cloudflared tunnel login` + `cloudflared tunnel create alt-bitnodes`
       on the VM; credentials JSON → `/etc/cloudflared/<id>.json` 0600.
 - [ ] 2.4 Public hostnames on the tunnel: `pesquisa-next.hacknodes.xyz`
       (temporary, for validation) and `ssh.hacknodes.xyz`. Cache rule:
@@ -101,6 +101,11 @@
       for 4.1. Write `/etc/alt-bitnodes/cloudflared.env` on the VM with
       `TUNNEL_ID`, `PUBLIC_HOST=pesquisa-next.hacknodes.xyz` (flipped in 5.2),
       `SSH_HOST=ssh.hacknodes.xyz`.
+      *2026-09-19: 2.1/2.2 were already done (zone on coby/evelyn
+      .ns.cloudflare.com). Tunnel `alt-bitnodes` created, id
+      `99c1d97e-4a46-48f0-abc5-d346f049c7f9`, creds in `/etc/cloudflared/`,
+      CNAMEs `pesquisa-next` and `ssh` routed, `cloudflared.env` written.
+      Pending in 2.4/2.5: cache rule, Access application + service token.*
 - [ ] 2.6 Access → Settings: SSE / WebSocket proxying on; confirm the 100 s
       idle-response behaviour against a long MCP tool call once 3.4 is up.
 
