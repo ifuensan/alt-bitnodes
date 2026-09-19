@@ -230,7 +230,9 @@ setup_i2pd() {
 # crawler-systemd-units spec).
 crawler_fingerprint() {
   {
-    git -C "${CRAWLER_DIR}" rev-parse HEAD 2>/dev/null
+    # As the checkout's owner: root reading a user-owned repo trips git's
+    # dubious-ownership check and would silently drop the revision.
+    sudo -u "${INSTALL_USER}" git -C "${CRAWLER_DIR}" rev-parse HEAD 2>/dev/null
     cat "${CRAWLER_DIR}"/conf/*.f9beb4d9.conf 2>/dev/null
     cat "${CRAWLER_DIR}/run-bitnodes.sh" 2>/dev/null
     cat /etc/systemd/system/bitnodes.service 2>/dev/null
@@ -480,7 +482,7 @@ setup_dashboard() {
   # Idempotent: replaces whatever ?v= value is present, so re-runs are safe
   # and `git reset --hard` (which restores the ?v=dev placeholder) re-stamps.
   local sha
-  sha="$(git -C "${DASHBOARD_DIR}" rev-parse --short HEAD)"
+  sha="$(sudo -u "${INSTALL_USER}" git -C "${DASHBOARD_DIR}" rev-parse --short HEAD)"
   sudo -u "${INSTALL_USER}" sed -i -E \
     "s#(/static/[a-zA-Z0-9._-]+\?v=)[^\"']*#\1${sha}#g" \
     "${DASHBOARD_DIR}"/templates/*.html
@@ -630,7 +632,8 @@ configure_nginx() {
   install -m 0644 "${DASHBOARD_DIR}/deploy/nginx/alt-bitnodes-limits.conf" \
     /etc/nginx/conf.d/alt-bitnodes-limits.conf
 
-  local site=/etc/nginx/sites-available/alt-bitnodes
+  local site=/etc/nginx/sites-available/alt-bitnodes site_before=""
+  [[ -f "${site}" ]] && site_before="$(cat "${site}")"
   if [[ "${EDGE_MODE}" == "cloudflare" ]]; then
     # Tunnel edge: loopback only, no shared secret, real IP from cloudflared.
     sed \
@@ -651,7 +654,14 @@ configure_nginx() {
 
   nginx -t
   systemctl enable nginx
-  systemctl reload nginx
+  # reload keeps listen sockets the new config no longer declares (the
+  # distro default site's 0.0.0.0:80 survived a reload on the first VM
+  # install); a restart is what actually applies a changed listen set.
+  if [[ "${site_before}" != "$(cat "${site}")" ]]; then
+    systemctl restart nginx
+  else
+    systemctl reload nginx
+  fi
 }
 
 # Cloudflare Tunnel: cloudflared keeps outbound connections to Cloudflare's

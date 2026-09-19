@@ -111,21 +111,30 @@
 
 ## 3. Data copy and first install
 
-- [ ] 3.1 On the EC2: `redis-cli save`; note sizes of
+- [x] 3.1 On the EC2: `redis-cli save`; note sizes of
       `/data/bitnodes-data/export/f9beb4d9`, `/data/alt-bitnodes-data`,
       `/data/redis/dump.rdb`.
-- [ ] 3.2 From the VM (pull, EC2 is the one with a public IP):
+- [x] 3.2 From the VM (pull, EC2 is the one with a public IP):
       `rsync -aH --info=progress2 ubuntu@<ec2>:/data/bitnodes-data/export/ /data/bitnodes-data/export/`,
       same for `/data/alt-bitnodes-data/` (exclude `unique-nodes.json`),
       `dump.rdb` → `/data/redis/`, and `/etc/alt-bitnodes/{mcp-token,research-token}`
       + `~/bitnodes/geoip/.maxmind_license_key` via `scp`. Verify counts and
       a checksum sample.
-- [ ] 3.3 `sudo bash deploy/install.sh` on the VM (curl the raw file from
+- [x] 3.3 `sudo bash deploy/install.sh` on the VM (curl the raw file from
       `main` first, as the README says). Expect: `/data` binds in place,
       Redis started on the copied RDB (stop Redis, chown `redis:redis`,
       start — before the installer enables it), nginx on loopback, tunnel up,
       `tor@*`/`i2pd` present but inactive, `bitnodes.service` active,
       `crawl.f9beb4d9.conf` showing `onion = False`, `i2p = False`.
+      *Done 2026-09-19. Copied 2029 exports (3.7 GB, 2026-05-09 → 08-13),
+      archive + propagation, dump.rdb (37k keys), both tokens, MaxMind key.
+      First install surfaced three installer bugs, all fixed in the repo:
+      bare-host fingerprint abort, root running git on a user checkout,
+      nginx reload keeping the default site's 0.0.0.0:80. Ran as a
+      transient unit (`systemd-run --setenv=SUDO_USER=ubuntu`) because a
+      nohup'd sudo dies with the SSH session. `export-prune.timer` parked
+      on the VM: the copied history predates 90 days and the timer would
+      have pruned May–June on its first run (decision pending).*
 - [ ] 3.4 Validate on `https://pesquisa-next.hacknodes.xyz` with
       `deploy/smoke-test-v2.sh` (adapt the host); `redis-cli scard up`
       climbing; first export within `snapshot_delay`; MCP with the copied
