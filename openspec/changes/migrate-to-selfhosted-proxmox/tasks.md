@@ -135,10 +135,19 @@
       nohup'd sudo dies with the SSH session. `export-prune.timer` parked
       on the VM: the copied history predates 90 days and the timer would
       have pruned May–June on its first run (decision pending).*
-- [ ] 3.4 Validate on `https://pesquisa-next.hacknodes.xyz` with
+- [x] 3.4 Validate on `https://pesquisa-next.hacknodes.xyz` with
       `deploy/smoke-test-v2.sh` (adapt the host); `redis-cli scard up`
       climbing; first export within `snapshot_delay`; MCP with the copied
       bearer token.
+      *Done 2026-09-19: `smoke-test-v2.sh` is stale (RTT leaderboard, 404
+      on prod too); compared ten endpoints prod vs next instead, all status
+      codes identical. Tunnel on three MAD edges, Let's Encrypt cert via
+      Cloudflare, `/api/*` DYNAMIC, `/static/*` cacheable, MCP 401 without
+      token / 400 with it (auth passes), first export 3 min after start.*
+      *3.5 in progress: `sessions-sampler` transient unit logs external
+      sockets per minute to `/var/log/alt-bitnodes/sessions.log`. Note the
+      raw `ss -s estab` figure is misleading: ~7.2k of it is loopback Redis
+      connections; the router only sees the external count (~240 at t+4min).*
 - [ ] 3.5 First-day watch: `ss -s | grep estab` every minute into a file,
       household connectivity sanity checks at ~2h and ~8h. If established
       sessions trend above ~6.8k, lower ping `workers` in `install.sh` (it
