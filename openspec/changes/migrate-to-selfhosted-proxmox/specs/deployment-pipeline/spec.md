@@ -38,6 +38,12 @@ SHALL be unchanged.
 An absent switch SHALL mean the behaviour of the host that predates the
 switch, so a push during a transition cannot change an existing host.
 
+#### Scenario: Installer completes on a bare host
+- **WHEN** `install.sh` runs on a host with no crawler checkout, no
+  generated confs and no `bitnodes.service` yet
+- **THEN** the pre-run crawler fingerprint is computed from empty input
+  and the installer proceeds instead of aborting at the first line of `main`
+
 #### Scenario: Legacy host is unaffected by new switches
 - **WHEN** `install.sh` with the new switches runs on a host that has no
   marker files

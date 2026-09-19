@@ -161,6 +161,10 @@ setup_data_volume() {
     install -d -o "${INSTALL_USER}" -g "${INSTALL_USER}" "/data/${d}"
   done
   install -d -o redis -g redis -m 0750 /data/redis
+  # A migrated dump.rdb is copied in before redis-server (and its user)
+  # exist, so it arrives root-owned; Redis must be able to read and rewrite
+  # it. Idempotent and harmless on a host that already owns its data.
+  chown -R redis:redis /data/redis
 
   sudo -u "${INSTALL_USER}" mkdir -p "${CRAWLER_DIR}/data" "${CRAWLER_DIR}/log" "${DASHBOARD_DIR}/data"
 
@@ -230,6 +234,11 @@ crawler_fingerprint() {
     cat "${CRAWLER_DIR}"/conf/*.f9beb4d9.conf 2>/dev/null
     cat "${CRAWLER_DIR}/run-bitnodes.sh" 2>/dev/null
     cat /etc/systemd/system/bitnodes.service 2>/dev/null
+    # On a fresh host every input above is missing. The group's status is
+    # its last command's, and under pipefail that would fail the whole
+    # substitution and abort the installer silently at the first line of
+    # main(). The fingerprint of "nothing yet" is still a valid fingerprint.
+    true
   } | sha256sum | cut -d' ' -f1
 }
 
