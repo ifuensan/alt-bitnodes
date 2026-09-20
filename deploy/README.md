@@ -143,7 +143,8 @@ curl -sI  https://pesquisa.hacknodes.xyz/api/v1/snapshots/latest/ | grep -i cf-c
 ```
 
 The `clearnet` profile also sets crawl `workers = 40` (vs 1200 on the
-EC2). Behind the Digi router the limit is new IPv4 connections per second
+EC2), crawl `socket_timeout = 15` and a 2-day `max_age` for gossiped
+addresses (fewer and shorter attempts to dead addresses). Behind the Digi router the limit is new IPv4 connections per second
 (~100/s before its SYN-flood protection drops them), not CPU or held
 sessions: 1200 workers gave 627 IPv4 nodes per cycle, 40 gave 4842. Cycles
 take ~2 h instead of 30 min. Do not raise it until the ONT bridge + own

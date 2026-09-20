@@ -157,7 +157,12 @@
       1200 → 300 still ~700 opens/s; → 40 gives ~90 opens/s and one cycle
       reached 6138 nodes (IPv4 4842, IPv6 1296) in 8242 s. Fixed in
       `install.sh` as part of the `clearnet` profile; cadence is now ~2 h
-      per snapshot until the router is replaced.*
+      per snapshot until the router is replaced. Experiment A (crawl
+      socket_timeout 15, max_age ≤ 2 d): 6389 reachable (IPv4 5087) in
+      7742 s — adopted into the profile. The held-IPv4 ceiling (~300–650
+      of ~4.9k) is the router's and unchanged; the export is also taken
+      60 s after each snapshot, inside the ping's 5-min dial spread, so the
+      public count captures the trough. Follow-up in docs/follow-ups.md.*
 - [x] 3.5 First-day watch: `ss -s | grep estab` every minute into a file,
       household connectivity sanity checks at ~2h and ~8h. If established
       sessions trend above ~6.8k, lower ping `workers` in `install.sh` (it

@@ -442,10 +442,18 @@ setup_crawler() {
   # cycle (2026-09-20). Cycles then take ~2h instead of 30 min, which the
   # windowed stats and the daily archive tolerate. `full` keeps the EC2
   # value; revisit once the ONT bridge + OPNsense remove the router limit.
-  local crawl_workers=1200
-  [[ "${CRAWLER_PROFILE}" == "clearnet" ]] && crawl_workers=40
+  # Same router budget, second lever: fewer and shorter attempts to dead
+  # addresses. With the crawl socket_timeout at 15 s (ping keeps 60) and
+  # gossiped addresses older than 2 days skipped (upstream default 5 d), a
+  # cycle went 6138 → 6389 reachable (IPv4 4842 → 5087) in 8242 → 7742 s.
+  local crawl_workers=1200 crawl_timeout=60 crawl_max_age="28800 - 432000"
+  if [[ "${CRAWLER_PROFILE}" == "clearnet" ]]; then
+    crawl_workers=40; crawl_timeout=15; crawl_max_age="28800 - 172800"
+  fi
   sudo -u "${INSTALL_USER}" sed -i \
     -e "s|^workers = .*|workers = ${crawl_workers}|" \
+    -e "s|^socket_timeout = .*|socket_timeout = ${crawl_timeout}|" \
+    -e "s|^max_age = .*|max_age = ${crawl_max_age}|" \
     -e "s|^onion_peers_sampling_rate = .*|onion_peers_sampling_rate = 100|" \
     -e "s|^snapshot_delay = .*|snapshot_delay = 1800|" \
     "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf"
