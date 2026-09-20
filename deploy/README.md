@@ -143,10 +143,14 @@ curl -fsSI https://pesquisa.hacknodes.xyz/                         # 200, Cloudf
 curl -sI  https://pesquisa.hacknodes.xyz/api/v1/snapshots/latest/ | grep -i cf-cache-status   # DYNAMIC/BYPASS
 ```
 
-First day: sample `ss -s` every minute and watch the household. If
-established sessions trend past ~6.8k, lower `workers` in
-`ping.f9beb4d9.conf` **in `install.sh`** (it is the snapshot ceiling and
-the installer re-renders it) and re-run.
+The `clearnet` profile also sets crawl `workers = 40` (vs 1200 on the
+EC2). Behind the Digi router the limit is new IPv4 connections per second
+(~100/s before its SYN-flood protection drops them), not CPU or held
+sessions: 1200 workers gave 627 IPv4 nodes per cycle, 40 gave 4842. Cycles
+take ~2 h instead of 30 min. Do not raise it until the ONT bridge + own
+router are in. Watch the first day with the external-socket log in
+`/var/log/alt-bitnodes/sessions.log` (note `ss -s` counts loopback Redis
+connections too; only external ones reach the router).
 
 ### 6. Enabling the overlays later
 

@@ -426,8 +426,17 @@ setup_crawler() {
   # sockets == ping processes x ping.workers, so ping capacity is the
   # snapshot ceiling: 12 procs x 2000 = 24k slots (upstream default is
   # 2000; the old 600 capped snapshots at 7 x 600 = 4.2k).
+  # Crawl workers set the NEW-connection rate, and behind a consumer router
+  # that is the binding limit, not CPU. The Digi/Zyxel NAT drops IPv4 SYNs
+  # once bursts exceed ~100/s: at 1200 workers (~700 opens/s) a cycle saw
+  # 627 IPv4 nodes; at 40 (~90 opens/s) the same host saw 4842 IPv4 in one
+  # cycle (2026-09-20). Cycles then take ~2h instead of 30 min, which the
+  # windowed stats and the daily archive tolerate. `full` keeps the EC2
+  # value; revisit once the ONT bridge + OPNsense remove the router limit.
+  local crawl_workers=1200
+  [[ "${CRAWLER_PROFILE}" == "clearnet" ]] && crawl_workers=40
   sudo -u "${INSTALL_USER}" sed -i \
-    -e "s|^workers = .*|workers = 1200|" \
+    -e "s|^workers = .*|workers = ${crawl_workers}|" \
     -e "s|^onion_peers_sampling_rate = .*|onion_peers_sampling_rate = 100|" \
     -e "s|^snapshot_delay = .*|snapshot_delay = 1800|" \
     "${CRAWLER_DIR}/conf/crawl.f9beb4d9.conf"

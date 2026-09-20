@@ -148,7 +148,15 @@
       sockets per minute to `/var/log/alt-bitnodes/sessions.log`. Note the
       raw `ss -s estab` figure is misleading: ~7.2k of it is loopback Redis
       connections; the router only sees the external count (~240 at t+4min).*
-- [ ] 3.5 First-day watch: `ss -s | grep estab` every minute into a file,
+      *Outcome 2026-09-20: the household never degraded (external sockets
+      peaked at 1.8k), but snapshots stalled at ~1.4k nodes: IPv6 at parity
+      with the EC2 (950 vs 1036), IPv4 at 10% (627 vs 6583). The limit is
+      the router's IPv4 SYN-rate protection, not sessions. Crawl workers
+      1200 → 300 still ~700 opens/s; → 40 gives ~90 opens/s and one cycle
+      reached 6138 nodes (IPv4 4842, IPv6 1296) in 8242 s. Fixed in
+      `install.sh` as part of the `clearnet` profile; cadence is now ~2 h
+      per snapshot until the router is replaced.*
+- [x] 3.5 First-day watch: `ss -s | grep estab` every minute into a file,
       household connectivity sanity checks at ~2h and ~8h. If established
       sessions trend above ~6.8k, lower ping `workers` in `install.sh` (it
       is the snapshot ceiling, so the change is a repo commit, not a hand
