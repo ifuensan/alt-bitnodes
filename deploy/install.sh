@@ -366,11 +366,24 @@ EOF
   sudo -u "${INSTALL_USER}" "${PYENV_ROOT}/bin/pyenv" install -s "${PYTHON_VERSION}"
 }
 
+# git over IPv4 from the home LAN loses SYNs while the crawler runs (the
+# router's NAT table fills with half-open attempts), so a single fetch can
+# time out on a bad minute. Retry a few times before failing the deploy.
+git_retry() {
+  local n
+  for n in 1 2 3 4; do
+    sudo -u "${INSTALL_USER}" git "$@" && return 0
+    log "git $1 failed (attempt ${n}/4); retrying in 15s"
+    sleep 15
+  done
+  return 1
+}
+
 clone_or_update() {
   local repo="$1" dest="$2" branch="${3:-}"
   if [[ -d "${dest}/.git" ]]; then
     log "Updating ${dest}"
-    sudo -u "${INSTALL_USER}" git -C "${dest}" fetch -q origin
+    git_retry -C "${dest}" fetch -q origin
     if [[ -n "${branch}" ]]; then
       sudo -u "${INSTALL_USER}" git -C "${dest}" checkout -q "${branch}"
       sudo -u "${INSTALL_USER}" git -C "${dest}" pull -q --ff-only origin "${branch}"
@@ -379,7 +392,7 @@ clone_or_update() {
     fi
   else
     log "Cloning ${repo} -> ${dest}"
-    sudo -u "${INSTALL_USER}" git clone -q "${repo}" "${dest}"
+    git_retry clone -q "${repo}" "${dest}"
     if [[ -n "${branch}" ]]; then
       sudo -u "${INSTALL_USER}" git -C "${dest}" checkout -q "${branch}"
     fi
