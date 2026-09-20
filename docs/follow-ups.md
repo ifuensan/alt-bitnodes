@@ -102,9 +102,15 @@ Evidence:
   half-open attempts to dead addresses (each lives ~our retry window +
   the router's SYN timeout) and the ping's established sockets.
 
-Levers being tried (one per ~2 h cycle): crawl `socket_timeout` 60 → 15
-and `max_age` upper bound 5 d → 2 d (fewer dead-address attempts, shorter
-half-open life), then crawl workers 40 → 20. The definitive fix is the
+Levers tried (one per ~2 h cycle): crawl `socket_timeout` 60 → 15 and
+`max_age` upper bound 5 d → 2 d — adopted 2026-09-20 (6389 reachable, IPv4
+5087, in 7742 s vs 6138 / 4842 / 8242 s); the held-IPv4 ceiling did not
+move. Not yet tried: crawl workers 40 → 20. Also note the export is taken
+60 s after each snapshot, inside the ping's 5-minute dial spread, so under
+this regime (where IPv4 sockets do not survive a cycle) the published
+count is the trough of the cycle, not its plateau — a ping-side
+`socket_timeout` / publish delay above 300 s would move the photo to
+after the spread. The definitive fix is the
 ONT bridge + OPNsense (own conntrack), which is also what the overlays
 wait for. Until then the public snapshot shows the clearnet-behind-Digi
 number, not the network.

@@ -258,7 +258,7 @@
 
 ## 7. Hand-off to the overlays change (not done here)
 
-- [ ] 7.1 Write `docs/runbooks/enable-overlays.md`: prerequisites (ONT
+- [x] 7.1 Write `docs/runbooks/enable-overlays.md`: prerequisites (ONT
       bridge, OPNsense with conntrack ≥ 100k, NAT re-test at 40k sessions),
       then `echo full | sudo tee /etc/alt-bitnodes/crawler-profile` and
       `sudo bash deploy/install.sh`; expected ramp times (onion ~13 h, I2P
