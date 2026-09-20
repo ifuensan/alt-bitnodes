@@ -33,7 +33,7 @@ SHALL be unchanged.
 ### Requirement: Host behaviour is selected by marker files, not environment
 
 `install.sh` SHALL read every host-specific switch from files under
-`/etc/alt-bitnodes/` (`edge`, `crawler-profile`, `parked-units`,
+`/etc/alt-bitnodes/` (`crawler-profile`, `parked-units`,
 `cloudflared.env`) and SHALL NOT depend on environment variables for them.
 An absent switch SHALL mean the behaviour of the host that predates the
 switch, so a push during a transition cannot change an existing host.
@@ -74,12 +74,13 @@ mountpoint it SHALL warn and continue.
 - **THEN** the installer logs a warning naming the missing layout and
   completes with everything on the root filesystem
 
-### Requirement: Hosts carry no cloud-provider agent unless the edge requires it
+### Requirement: Hosts carry no cloud-provider agent
 
-The installer SHALL install the CloudWatch agent only while
-`edge = cloudfront`; a Cloudflare-edge host SHALL have no AWS component.
+The installer SHALL install no cloud-provider component: no CloudWatch
+agent, no CloudFormation, no origin shared secret. The public edge is the
+Cloudflare Tunnel alone.
 
-#### Scenario: Cloudflare host is provider-free
-- **WHEN** `edge` contains `cloudflare` and `install.sh` runs
-- **THEN** `dpkg -s amazon-cloudwatch-agent` reports not installed and no
-  `/opt/aws` directory is created
+#### Scenario: Host is provider-free
+- **WHEN** `install.sh` runs
+- **THEN** `dpkg -s amazon-cloudwatch-agent` reports not installed, no
+  `/opt/aws` directory is created and no `origin-auth.env` is written

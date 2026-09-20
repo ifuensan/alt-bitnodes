@@ -1,12 +1,13 @@
 # Crawler tuning
 
 How to size the upstream `bitnodes` crawler for a given host without
-saturating Tor or under-filling the snapshot. Numbers below are calibrated
-for the current production EC2 (**c7g.2xlarge, 8 vCPU, 16 GB RAM**)
-running `crawl + ping + resolve + export + seeder + cache_inv` plus
-Redis, Tor and nginx on the same box. Earlier calibration data from
-the previous t4g.medium (2 vCPU, 4 GB) is preserved in the tables
-below for reference.
+saturating Tor or under-filling the snapshot. Numbers below were calibrated
+on the former production EC2 (**c7g.2xlarge, 8 vCPU, 16 GB RAM**), which
+the current Proxmox VM matches (8 vCPU, 16 GB); they hold for the `full`
+profile. Under the `clearnet` profile behind a consumer router the binding
+limit is the router's NAT, not CPU — see `docs/follow-ups.md`. Earlier
+calibration data from the t4g.medium (2 vCPU, 4 GB) is preserved in the
+tables below for reference.
 
 If you move to a larger or smaller instance, rescale **`workers`**
 proportionally to vCPU count (≈150 crawl workers per vCPU) and verify

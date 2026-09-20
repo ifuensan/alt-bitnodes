@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Idempotent installer for Ubuntu 24.04 LTS. Host-agnostic: it ran on an
-# AWS EC2 (ARM64 / Graviton) and now targets a VM on the home Proxmox host
-# (x86-64); everything host-specific is selected by marker files under
-# /etc/alt-bitnodes (see EDGE_MODE / CRAWLER_PROFILE / PARKED_UNITS_FILE).
+# Idempotent installer for Ubuntu 24.04 LTS on the production VM (home
+# Proxmox, behind a Cloudflare Tunnel). Host-specific switches are marker
+# files under /etc/alt-bitnodes (see CRAWLER_PROFILE / PARKED_UNITS_FILE).
 # Sets up: pyenv + Python 3.12.4, redis-server, ifuensan/bitnodes (crawler),
-# ifuensan/alt-bitnodes (dashboard), Tor pool, i2pd, nginx, the public edge
-# (Cloudflare Tunnel or, legacy, CloudFront origin), systemd units.
+# ifuensan/alt-bitnodes (dashboard), Tor pool, i2pd, nginx on loopback,
+# cloudflared, systemd units. The AWS EC2 + CloudFront era ended 2026-09-20
+# (openspec change migrate-to-selfhosted-proxmox).
 #
 # Usage (as the ubuntu user):
 #   curl -fsSL https://raw.githubusercontent.com/ifuensan/alt-bitnodes/main/deploy/install.sh | bash
@@ -85,12 +85,10 @@ is_parked() {
 # means "the behaviour of the host that predates the switch", so a push
 # during a transition cannot change an existing host.
 #
-#   /etc/alt-bitnodes/edge             cloudfront (legacy EC2) | cloudflare
 #   /etc/alt-bitnodes/crawler-profile  full | clearnet
 #
-# Provisioning a new host writes both before the first run:
-#   echo cloudflare | sudo tee /etc/alt-bitnodes/edge
-#   echo clearnet   | sudo tee /etc/alt-bitnodes/crawler-profile
+# Provisioning a new host writes it before the first run:
+#   echo clearnet | sudo tee /etc/alt-bitnodes/crawler-profile
 read_marker() {
   local file="/etc/alt-bitnodes/$1" default="$2" value
   if [[ -s "${file}" ]]; then
@@ -100,9 +98,7 @@ read_marker() {
     printf '%s' "${default}"
   fi
 }
-EDGE_MODE="$(read_marker edge cloudfront)"
 CRAWLER_PROFILE="$(read_marker crawler-profile full)"
-case "${EDGE_MODE}" in cloudfront|cloudflare) ;; *) echo "bad /etc/alt-bitnodes/edge: ${EDGE_MODE}"; exit 1 ;; esac
 case "${CRAWLER_PROFILE}" in full|clearnet) ;; *) echo "bad /etc/alt-bitnodes/crawler-profile: ${CRAWLER_PROFILE}"; exit 1 ;; esac
 
 # Overlay daemons (Tor pool, tor@default, i2pd) run only under the `full`
@@ -499,8 +495,8 @@ setup_dashboard() {
 
   # Cache-bust static assets by stamping the deployed commit into their
   # URLs (?v=<sha>). A content change ships a new URL, so no browser or
-  # CloudFront edge can ever serve a stale app.js/app.css against fresh
-  # HTML — the recurring "forgot to invalidate CloudFront" breakage.
+  # Cloudflare edge can ever serve a stale app.js/app.css against fresh
+  # HTML — the recurring "forgot to purge the CDN" breakage.
   # Idempotent: replaces whatever ?v= value is present, so re-runs are safe
   # and `git reset --hard` (which restores the ?v=dev placeholder) re-stamps.
   local sha
@@ -593,29 +589,6 @@ install_systemd_units() {
   fi
 }
 
-bootstrap_origin_secret() {
-  # Shared secret CloudFront injects as X-Origin-Auth; nginx rejects requests
-  # without it. Generated once on first install; rotation is a manual op
-  # (delete the file and re-run, then update the CloudFormation parameter).
-  local dir=/etc/alt-bitnodes
-  local file="${dir}/origin-auth.env"
-  # Group stays INSTALL_USER: the token files in this directory are read by
-  # the service user, and this now runs after generate_token_file.
-  install -d -m 0750 -o root -g "${INSTALL_USER}" "${dir}"
-  if [[ ! -f "${file}" ]]; then
-    log "Generating ${file}"
-    umask 077
-    printf 'ORIGIN_AUTH_SECRET=%s\n' "$(openssl rand -hex 32)" > "${file}"
-    chmod 0600 "${file}"
-    chown root:root "${file}"
-  else
-    log "${file} already present; leaving as-is"
-  fi
-  # shellcheck disable=SC1090
-  source "${file}"
-  export ORIGIN_AUTH_SECRET
-}
-
 generate_token_file() {
   # Write a random token to $1 if absent. Owned by the service user so systemd
   # can read it without giving the file world access. Rotation: delete the file
@@ -656,19 +629,10 @@ configure_nginx() {
 
   local site=/etc/nginx/sites-available/alt-bitnodes site_before=""
   [[ -f "${site}" ]] && site_before="$(cat "${site}")"
-  if [[ "${EDGE_MODE}" == "cloudflare" ]]; then
-    # Tunnel edge: loopback only, no shared secret, real IP from cloudflared.
-    sed \
-      -e "s|__SERVER_NAME__|${PUBLIC_HOST} _|g" \
-      "${DASHBOARD_DIR}/deploy/nginx/alt-bitnodes-tunnel.conf.template" > "${site}"
-  else
-    # Legacy CloudFront origin. Use a delimiter that won't appear in the
-    # secret (hex only) or hostnames.
-    sed \
-      -e "s|__SERVER_NAME__|origin.hacknodes.xyz pesquisa.hacknodes.xyz _|g" \
-      -e "s|__SECRET__|${ORIGIN_AUTH_SECRET}|g" \
-      "${DASHBOARD_DIR}/deploy/nginx/alt-bitnodes.conf.template" > "${site}"
-  fi
+  # Loopback only, no shared secret, real IP from cloudflared.
+  sed \
+    -e "s|__SERVER_NAME__|${PUBLIC_HOST} _|g" \
+    "${DASHBOARD_DIR}/deploy/nginx/alt-bitnodes.conf.template" > "${site}"
   chmod 0644 "${site}"
 
   ln -sf "${site}" /etc/nginx/sites-enabled/alt-bitnodes
@@ -737,25 +701,6 @@ setup_cloudflared() {
   systemctl enable --now cloudflared.service
 }
 
-install_cloudwatch_agent() {
-  log "Installing amazon-cloudwatch-agent"
-  local arch deb cfg_target
-  arch="$(dpkg --print-architecture)"   # arm64 on Graviton, amd64 otherwise
-  deb="/tmp/amazon-cloudwatch-agent.deb"
-  if ! dpkg -s amazon-cloudwatch-agent >/dev/null 2>&1; then
-    curl -fsSL -o "${deb}" \
-      "https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/${arch}/latest/amazon-cloudwatch-agent.deb"
-    dpkg -i "${deb}"
-    rm -f "${deb}"
-  fi
-
-  cfg_target="/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json"
-  install -m 0644 "${DASHBOARD_DIR}/deploy/cloudwatch-agent.json" "${cfg_target}"
-
-  /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
-    -a fetch-config -m ec2 -s -c "file:${cfg_target}"
-}
-
 main() {
   require_root
   CRAWLER_STATE_BEFORE="$(crawler_fingerprint)"
@@ -769,20 +714,11 @@ main() {
   bootstrap_mcp_token
   bootstrap_research_token
   install_systemd_units
-  case "${EDGE_MODE}" in
-    cloudflare)
-      load_cloudflared_env
-      configure_nginx
-      setup_cloudflared
-      ;;
-    cloudfront)
-      bootstrap_origin_secret
-      configure_nginx
-      install_cloudwatch_agent
-      ;;
-  esac
+  load_cloudflared_env
+  configure_nginx
+  setup_cloudflared
 
-  log "Done (edge=${EDGE_MODE}, crawler-profile=${CRAWLER_PROFILE})"
+  log "Done (crawler-profile=${CRAWLER_PROFILE})"
   echo
   echo "Verify:"
   echo "  systemctl status bitnodes alt-bitnodes alt-bitnodes-mcp"

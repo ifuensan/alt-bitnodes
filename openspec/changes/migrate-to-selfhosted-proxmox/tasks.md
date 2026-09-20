@@ -242,13 +242,13 @@
       100.50.100.201 released; `EC2_*` GitHub secrets deleted. Rollback
       from here means restoring from the snapshots. Still to do by hand:
       delete the `origin` and `pesquisa-next` records in Cloudflare DNS.*
-- [ ] 6.4 Repo: delete `deploy/cloudformation/`, `deploy/cloudwatch-agent.json`,
+- [x] 6.4 Repo: delete `deploy/cloudformation/`, `deploy/cloudwatch-agent.json`,
       `install_cloudwatch_agent`, `bootstrap_origin_secret`, the
       `cloudfront` branch of `configure_nginx` and the old nginx template;
       rename the tunnel template; drop the `edge` marker (installer assumes
       Cloudflare); README "Legacy: AWS EC2" section → one paragraph of
       history pointing at the archived change.
-- [ ] 6.5 `deploy/README.md` cost notes → home hosting; `deploy/TUNING.md`
+- [x] 6.5 `deploy/README.md` cost notes → home hosting; `deploy/TUNING.md`
       header → VM sizing.
 
 ## 7. Hand-off to the overlays change (not done here)

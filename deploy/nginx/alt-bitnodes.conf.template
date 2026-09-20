@@ -1,45 +1,23 @@
-# alt-bitnodes reverse proxy. TLS lives on CloudFront; this server only
-# accepts plain HTTP from the CloudFront origin-facing prefix list and
-# requires the shared X-Origin-Auth header. Anything else gets 403.
+# alt-bitnodes reverse proxy behind a Cloudflare Tunnel. TLS lives on
+# Cloudflare; cloudflared on this host forwards to this server over
+# loopback, so nothing here is reachable from the LAN or the Internet and
+# no shared-secret gate is needed (the tunnel is the only path in).
 #
 # Template substitutions performed by deploy/install.sh:
-#   __SERVER_NAME__ -> origin + public domain + "_" catch-all
-#   __SECRET__      -> value of ORIGIN_AUTH_SECRET
+#   __SERVER_NAME__ -> public hostname + "_" catch-all
+#
+# Below the real-IP block: rate limiting, security headers, proxy settings,
+# the /mcp/ SSE handling and its Host rewrite.
 
-# Trust X-Forwarded-For from CloudFront so rate limiting + access logs see
-# real client IPs, not the CloudFront edge.
-set_real_ip_from 130.176.0.0/16;
-set_real_ip_from 13.32.0.0/15;
-set_real_ip_from 13.224.0.0/14;
-set_real_ip_from 52.84.0.0/15;
-set_real_ip_from 54.182.0.0/16;
-set_real_ip_from 54.192.0.0/16;
-set_real_ip_from 54.230.0.0/16;
-set_real_ip_from 54.239.128.0/18;
-set_real_ip_from 54.239.192.0/19;
-set_real_ip_from 99.84.0.0/16;
-set_real_ip_from 204.246.164.0/22;
-set_real_ip_from 204.246.168.0/22;
-set_real_ip_from 204.246.174.0/23;
-set_real_ip_from 204.246.176.0/20;
-set_real_ip_from 205.251.192.0/19;
-set_real_ip_from 205.251.249.0/24;
-set_real_ip_from 205.251.250.0/23;
-set_real_ip_from 205.251.252.0/23;
-set_real_ip_from 205.251.254.0/24;
-set_real_ip_from 216.137.32.0/19;
-real_ip_header X-Forwarded-For;
-real_ip_recursive on;
+# The client address arrives in CF-Connecting-IP, set by Cloudflare and
+# relayed by cloudflared. Trust it only from the local cloudflared so
+# rate limiting and access logs key on the real client.
+set_real_ip_from 127.0.0.1;
+real_ip_header CF-Connecting-IP;
 
 server {
-    listen 80 default_server;
+    listen 127.0.0.1:80 default_server;
     server_name __SERVER_NAME__;
-
-    # Reject anything not coming through CloudFront with the right header.
-    # The SG also limits ingress to CloudFront ranges; this is defense in depth.
-    if ($http_x_origin_auth != "__SECRET__") {
-        return 403;
-    }
 
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-Frame-Options "DENY" always;
@@ -73,18 +51,16 @@ server {
     }
 
     # MCP Streamable HTTP transport. The MCP server (alt-bitnodes-mcp.service)
-    # validates Authorization: Bearer <token> itself; nginx only enforces the
-    # CloudFront origin gate (X-Origin-Auth, set on the server block above)
-    # and rate-limits abusive clients. Buffering is disabled and timeouts
-    # raised because MCP responses stream Server-Sent Events that can stay
-    # open for tens of minutes.
+    # validates Authorization: Bearer <token> itself; nginx only rate-limits
+    # abusive clients. Buffering is disabled and timeouts raised because MCP
+    # responses stream Server-Sent Events that can stay open for tens of
+    # minutes. Note Cloudflare's proxy closes a response idle for 100 s;
+    # clients reconnect, as they already do on the 1h cap below.
     #
     # proxy_pass target deliberately ends without a trailing slash: FastMCP
     # mounts at "/mcp" (no slash) and redirects 307 to "/mcp" when reached
     # via "/mcp/". Forwarding directly to "/mcp" skips that redirect, which
-    # would otherwise leak an internal 127.0.0.1 Location header through
-    # CloudFront. The location prefix stays /mcp/ because CloudFront's
-    # path pattern is /mcp/*; MCP only uses the root endpoint, no subpaths.
+    # would otherwise leak an internal 127.0.0.1 Location header.
     location /mcp/ {
         limit_req zone=api burst=20 nodelay;
         proxy_pass http://127.0.0.1:8001/mcp;
