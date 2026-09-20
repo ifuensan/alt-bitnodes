@@ -134,7 +134,9 @@
       transient unit (`systemd-run --setenv=SUDO_USER=ubuntu`) because a
       nohup'd sudo dies with the SSH session. `export-prune.timer` parked
       on the VM: the copied history predates 90 days and the timer would
-      have pruned May–June on its first run (decision pending).*
+      have pruned May–June on its first run. Decision 2026-09-20: keep the
+      90-day retention; timer unparked, the tiered archive is the long-term
+      record.*
 - [x] 3.4 Validate on `https://pesquisa-next.hacknodes.xyz` with
       `deploy/smoke-test-v2.sh` (adapt the host); `redis-cli scard up`
       climbing; first export within `snapshot_delay`; MCP with the copied
