@@ -1,4 +1,4 @@
-name: Deploy to EC2
+name: Deploy to production
 
 on:
   push:
@@ -42,27 +42,56 @@ jobs:
     needs: test
     timeout-minutes: 20
     steps:
+      # The production host is a VM on a home LAN with no public inbound
+      # path. SSH goes through the Cloudflare Tunnel: `cloudflared access
+      # ssh` is the ProxyCommand, authenticated with an Access service token
+      # (Zero Trust application for DEPLOY_HOST, policy "Service Auth").
+      - name: Install cloudflared
+        run: |
+          sudo mkdir -p --mode=0755 /usr/share/keyrings
+          curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
+            | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+          echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' \
+            | sudo tee /etc/apt/sources.list.d/cloudflared.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cloudflared
+          cloudflared --version
+
       - name: Configure SSH
         env:
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
+        # known_hosts comes from a secret: ssh-keyscan cannot go through the
+        # Access proxy. The key line is "<DEPLOY_HOST> ssh-ed25519 AAAA...",
+        # captured on the LAN at provisioning (deploy/README.md).
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -T 5 -t rsa,ecdsa,ed25519 "$EC2_HOST" >> ~/.ssh/known_hosts
+          printf '%s\n' "$DEPLOY_HOST_KEY" >> ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host $DEPLOY_HOST
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            BatchMode yes
+            ProxyCommand cloudflared access ssh --hostname %h
+          EOF
+          chmod 600 ~/.ssh/config
 
-      - name: Run installer on EC2
+      - name: Run installer on the production host
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         # `git pull` runs before install.sh so the script on disk matches
         # the commit being deployed. Without this the installer runs an
         # older snapshot of itself and may revert config changes that this
         # very commit introduces (install.sh later re-pulls, but only the
         # next run benefits).
         run: |
-          ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$EC2_USER@$EC2_HOST" '
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" '
             set -e
             cd ~/alt-bitnodes
             git fetch -q origin main
@@ -72,10 +101,12 @@ jobs:
 
       - name: Smoke test dashboard
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_USER: ${{ secrets.EC2_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
         run: |
-          ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$EC2_USER@$EC2_HOST" '
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" '
             for i in 1 2 3 4 5; do
               code=$(curl -fsS -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:8000/ || true)
               echo "attempt $i: HTTP ${code:-none}"
