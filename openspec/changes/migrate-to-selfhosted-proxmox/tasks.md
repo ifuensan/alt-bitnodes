@@ -183,8 +183,14 @@
       (VM's IPv4 SYNs throttled mid-crawl, 134 s timeout) → installer
       retries git; run 35515000236 green: Access SSH, installer,
       `Done (edge=cloudflare, crawler-profile=clearnet)`, smoke 200.*
-- [ ] 4.3 Remove the EC2 deploy key from the EC2's `authorized_keys` (the
+- [x] 4.3 Remove the EC2 deploy key from the EC2's `authorized_keys` (the
       pipeline must have exactly one target).
+      *Resolved differently 2026-09-20: the EC2's `authorized_keys` holds
+      only the operator's own key (`hacknodes`, the same pair the old
+      workflow used) and the temporary migration key — removing it would
+      lock the operator out. The pipeline now references only `DEPLOY_*`
+      secrets, so it has exactly one target; the `EC2_*` secrets are
+      deleted in 6.3 with the instance.*
 
 ## 5. Cutover
 
