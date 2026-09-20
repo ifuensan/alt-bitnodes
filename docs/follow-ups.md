@@ -200,13 +200,17 @@ split (system vs collected data) is worth reproducing.
 
 ### VM 114 has no backup job on frodo
 
-**Status**: Open 2026-09-20. `onboot=1` and `scsi1 backup=0` are set, but
-the VM is not in frodo's vzdump job because the host's `local` storage is
-at 94% and the existing nightly job (VMs 104 + 108, keep-last=2) has been
-failing silently for lack of space (no dump of 108 after 2026-09-11, of
-104 after 2026-08-20). Free or relocate dumps first, then add 114 (root
-disk only; `/data` is reproducible from the archive and the final EBS
-snapshots in AWS).
+**Status**: Done 2026-09-20 evening. frodo got a ZFS mirror `backup`
+(two spare 1.1 TB SAS disks, ARC capped at 4 GiB) registered as storage
+`backup`; the nightly vzdump job now targets it with `keep-last=4` for
+104, 108, 112, 113 and 114 (root disk only for 114; `/data` is
+reproducible from the archive and the final EBS snapshots in AWS). Old
+dumps and ISOs moved off the root (94% → 9%). Test backup of 114: 40 s,
+1.33 GB. Found on the way: the host runs on 64 GB because the second
+64 GB DIMM (`PROC 1 DIMM 3`) was disabled by the firmware after repeated
+uncorrectable ECC errors since January — replace it; and the IPMI SEL was
+full since 2026-08-18 (saved to `/root/sel-frodo-2026-09-20.txt`, then
+cleared).
 
 ### CloudFront access logs to S3
 
