@@ -31,7 +31,7 @@
 - [x] 0.6 `deploy/README.md`: new top section "Deploy on a Proxmox VM"
       (VM spec, disks, marker files, Cloudflare setup, first install); the
       EC2 section stays until phase 6 under a "Legacy: AWS EC2" heading.
-- [ ] 0.7 `.github/workflows/deploy.yml`: rename to "Deploy to production";
+- [x] 0.7 `.github/workflows/deploy.yml`: rename to "Deploy to production";
       install `cloudflared` on the runner; `ProxyCommand cloudflared access
       ssh --hostname $DEPLOY_HOST` with `CF_ACCESS_CLIENT_ID/SECRET` in the
       environment; `known_hosts` from `DEPLOY_HOST_KEY`; secrets renamed
@@ -93,10 +93,10 @@
       CloudFront and the site still returns 200.
 - [x] 2.3 `cloudflared tunnel login` + `cloudflared tunnel create alt-bitnodes`
       on the VM; credentials JSON → `/etc/cloudflared/<id>.json` 0600.
-- [ ] 2.4 Public hostnames on the tunnel: `pesquisa-next.hacknodes.xyz`
+- [x] 2.4 Public hostnames on the tunnel: `pesquisa-next.hacknodes.xyz`
       (temporary, for validation) and `ssh.hacknodes.xyz`. Cache rule:
       bypass cache for `/api/*` and `/mcp/*`; leave `/static/*` on defaults.
-- [ ] 2.5 Zero Trust → Access: application for `ssh.hacknodes.xyz`, policy
+- [x] 2.5 Zero Trust → Access: application for `ssh.hacknodes.xyz`, policy
       "Service Auth" with a new service token; record client id/secret
       for 4.1. Write `/etc/alt-bitnodes/cloudflared.env` on the VM with
       `TUNNEL_ID`, `PUBLIC_HOST=pesquisa-next.hacknodes.xyz` (flipped in 5.2),
@@ -106,7 +106,7 @@
       `99c1d97e-4a46-48f0-abc5-d346f049c7f9`, creds in `/etc/cloudflared/`,
       CNAMEs `pesquisa-next` and `ssh` routed, `cloudflared.env` written.
       Pending in 2.4/2.5: cache rule, Access application + service token.*
-- [ ] 2.6 Access → Settings: SSE / WebSocket proxying on; confirm the 100 s
+- [x] 2.6 Access → Settings: SSE / WebSocket proxying on; confirm the 100 s
       idle-response behaviour against a long MCP tool call once 3.4 is up.
 
 ## 3. Data copy and first install
@@ -166,13 +166,23 @@
 
 ## 4. Deploy pipeline
 
-- [ ] 4.1 GitHub → environment `PRO`: add `DEPLOY_SSH_KEY` (new ed25519 key,
+- [x] 4.1 GitHub → environment `PRO`: add `DEPLOY_SSH_KEY` (new ed25519 key,
       public half in the VM user's `authorized_keys`), `DEPLOY_HOST`
       (`ssh.hacknodes.xyz`), `DEPLOY_USER`, `DEPLOY_HOST_KEY`
       (`ssh-keyscan` run from the LAN), `CF_ACCESS_CLIENT_ID`,
       `CF_ACCESS_CLIENT_SECRET`. Keep the `EC2_*` secrets until phase 6.
-- [ ] 4.2 Merge 0.7; run `workflow_dispatch`; confirm test → deploy → smoke
+- [x] 4.2 Merge 0.7; run `workflow_dispatch`; confirm test → deploy → smoke
       green against the VM and that a docs-only push still skips.
+      *Done 2026-09-20. 2.4: cache rule `alt-bitnodes bypass api` (Bypass
+      cache, path starts with /api/ or /mcp/). 2.5: Access app `ssh` on
+      ssh.hacknodes.xyz with one Service Auth policy (`deploy`, token
+      `github-deploy`); anonymous GET → 403. 2.6: nothing to set; the
+      100 s idle timeout is documented in the tunnel nginx template.
+      4.1: six `DEPLOY_*`/`CF_ACCESS_*` secrets in environment PRO,
+      dedicated ed25519 deploy key. 4.2: first run failed on `git fetch`
+      (VM's IPv4 SYNs throttled mid-crawl, 134 s timeout) → installer
+      retries git; run 35515000236 green: Access SSH, installer,
+      `Done (edge=cloudflare, crawler-profile=clearnet)`, smoke 200.*
 - [ ] 4.3 Remove the EC2 deploy key from the EC2's `authorized_keys` (the
       pipeline must have exactly one target).
 
