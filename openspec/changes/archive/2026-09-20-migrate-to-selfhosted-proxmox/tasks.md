@@ -205,11 +205,13 @@
       proxied; add `pesquisa` as a public hostname on the tunnel (or rename
       `pesquisa-next`); `PUBLIC_HOST=pesquisa.hacknodes.xyz` in
       `cloudflared.env`; re-run the installer.
+      *5.4 done 2026-09-20: `pesquisa-next` and `origin` records deleted by
+      the operator; verified absent at 1.1.1.1.*
 - [x] 5.3 Smoke test on the real hostname; check the certificate is
       Cloudflare's; `curl -sI https://pesquisa.hacknodes.xyz/static/app.js`
       shows `cf-cache-status`. MCP client (`claude mcp list`) still works
       with the old token.
-- [ ] 5.4 Remove `pesquisa-next`. Leave `origin.hacknodes.xyz` and the
+- [x] 5.4 Remove `pesquisa-next`. Leave `origin.hacknodes.xyz` and the
       CloudFront stack alone for 72 h as rollback.
 - [x] 5.5 `docs/follow-ups.md`: record cutover date and the first
       household/session observations.
@@ -264,4 +266,9 @@
       `sudo bash deploy/install.sh`; expected ramp times (onion ~13 h, I2P
       needs seeds); the MaxCircuitDirtiness end-state decision from
       `onion-proxy-affinity` applies at that moment.
-- [ ] 7.2 Sync specs and archive this change.
+- [x] 7.2 Sync specs and archive this change.
+      *Archived 2026-09-20 by hand (no `openspec` CLI on the workstation):
+      `public-edge` rewritten for the tunnel, `crawler-systemd-units` gained
+      the profile requirement, `deployment-pipeline` created. Task 1.5 (VM
+      backup job) stays open outside this change — see the frodo entry in
+      `docs/follow-ups.md`.*

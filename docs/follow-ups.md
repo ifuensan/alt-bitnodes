@@ -14,9 +14,8 @@ afternoon.** pesquisa.hacknodes.xyz is served by VM 114 on the home Proxmox
 through a Cloudflare Tunnel. The EC2, its EIP, the CloudFront stack and the
 CloudWatch dashboard are gone; two EBS snapshots
 (`alt-bitnodes-final-2026-09-20-root/-data`) remain in us-east-1 as the
-backup. Remaining repo work: phase 6.4/6.5 of
-`openspec/changes/migrate-to-selfhosted-proxmox/` (drop the CloudFront
-branch of the installer). Clearnet profile only;
+backup. Change archived as
+`openspec/changes/archive/2026-09-20-migrate-to-selfhosted-proxmox/`. Clearnet profile only;
 the public count is bounded by the Digi router (see the entry below) until
 the ONT bridge + OPNsense work, which the operator cannot schedule yet.
 Decided 2026-08-01. Driver: egress cost — the scaled
@@ -86,7 +85,7 @@ Notes for the migration:
 ### The Digi router caps the crawler host's IPv4 sessions (2026-09-20)
 
 **Status**: Open, measured on the Proxmox VM during the migration
-(`migrate-to-selfhosted-proxmox`, task 3.5). The household is unaffected;
+(`archive/2026-09-20-migrate-to-selfhosted-proxmox`, task 3.5). The household is unaffected;
 the crawler host alone is throttled on IPv4, and IPv6 is untouched.
 
 Evidence:
@@ -199,13 +198,22 @@ everything back on root. Either teach the installer about the data volume
 or carry the layout into the Proxmox migration explicitly — where the same
 split (system vs collected data) is worth reproducing.
 
+### VM 114 has no backup job on frodo
+
+**Status**: Open 2026-09-20. `onboot=1` and `scsi1 backup=0` are set, but
+the VM is not in frodo's vzdump job because the host's `local` storage is
+at 94% and the existing nightly job (VMs 104 + 108, keep-last=2) has been
+failing silently for lack of space (no dump of 108 after 2026-09-11, of
+104 after 2026-08-20). Free or relocate dumps first, then add 114 (root
+disk only; `/data` is reproducible from the archive and the final EBS
+snapshots in AWS).
+
 ### CloudFront access logs to S3
 
-**Status**: Sonar hotspot `cloudformation:S6258` marked Safe
-2026-05-13 because the omission is a deliberate phase-1 trade-off.
-Reconsider if abuse investigation ever needs CDN-side data — see
-`deploy/cloudformation/edge.yaml` comments and the public-edge
-research thread.
+**Status**: Closed 2026-09-20 — CloudFront is gone with the AWS exit. The
+equivalent question on Cloudflare (free plan has no raw request logs;
+nginx's access log on the VM records every request with the real IP via
+`CF-Connecting-IP`) is answered the same way: origin logs suffice.
 
 ## Testing
 

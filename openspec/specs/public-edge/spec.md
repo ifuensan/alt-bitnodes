@@ -2,106 +2,107 @@
 
 ## Purpose
 
-Exposición pública del dashboard alt-bitnodes vía CloudFront + nginx en el EC2 de origen. Cubre TLS, dominio personalizado, aislamiento del origin, cache diferenciado, rate limiting básico y la documentación operativa del despliegue.
+Public exposure of the alt-bitnodes dashboard, API and MCP endpoint at
+`https://pesquisa.hacknodes.xyz` through a Cloudflare Tunnel from the
+production VM: TLS at Cloudflare, no inbound path to the host, real client
+IP for rate limiting, cache behaviour by route, and the operational
+documentation. Replaced the CloudFront + EC2 origin design on 2026-09-20
+(change `migrate-to-selfhosted-proxmox`).
 
 ## Requirements
 
-### Requirement: TLS público vía CloudFront
+### Requirement: Public TLS via Cloudflare Tunnel
 
-El sistema SHALL servir el dashboard y la API en `https://pesquisa.hacknodes.xyz` usando una distribución CloudFront con certificado ACM válido emitido en `us-east-1`.
+The system SHALL serve the dashboard, the API and the MCP endpoint at
+`https://pesquisa.hacknodes.xyz` through a Cloudflare Tunnel terminated by a
+`cloudflared` systemd unit on the production host. TLS SHALL be terminated
+by Cloudflare with a certificate valid for the hostname; the host SHALL
+expose no inbound listener to the Internet for this purpose.
 
-#### Scenario: Cliente accede por HTTPS y obtiene contenido
+#### Scenario: Client fetches the dashboard over HTTPS
+- **WHEN** a client requests `GET https://pesquisa.hacknodes.xyz/`
+- **THEN** the response is `200 OK` with the dashboard HTML over a
+  certificate whose SAN includes `pesquisa.hacknodes.xyz`
 
-- **WHEN** un cliente hace `GET https://pesquisa.hacknodes.xyz/`
-- **THEN** la respuesta SHALL ser `200 OK` con el HTML del dashboard
-- **AND** el certificado SHALL ser válido (cadena confiable, no expirado, CN/SAN incluye `pesquisa.hacknodes.xyz`)
+#### Scenario: Plain HTTP is upgraded
+- **WHEN** a client requests `GET http://pesquisa.hacknodes.xyz/`
+- **THEN** Cloudflare answers with a `301` to the HTTPS equivalent
 
-#### Scenario: Redirección HTTP a HTTPS
+#### Scenario: Tunnel down means unavailable, not exposed
+- **WHEN** `cloudflared.service` is stopped on the host
+- **THEN** the public hostname returns a Cloudflare 5xx and no port on the
+  host's LAN address answers HTTP
 
-- **WHEN** un cliente hace `GET http://pesquisa.hacknodes.xyz/`
-- **THEN** CloudFront SHALL responder `301 Moved Permanently` apuntando al equivalente HTTPS
+### Requirement: Origin isolation by construction
 
-### Requirement: Aislamiento del origin EC2
+nginx on the host SHALL listen only on `127.0.0.1:80`. There SHALL be no
+shared-secret header, no IP allow-list and no inbound firewall rule for the
+web path: the tunnel process is the only route to the origin.
 
-El sistema SHALL impedir el acceso directo al EC2 desde internet salvo a través de CloudFront. El puerto `80` del EC2 SHALL estar accesible únicamente desde la prefix list `com.amazonaws.global.cloudfront.origin-facing` y SHALL exigir un header secreto `X-Origin-Auth` para procesar requests.
+#### Scenario: LAN access to the origin is refused
+- **WHEN** a host on the same LAN connects to `<vm-ip>:80` or `<vm-ip>:8000`
+- **THEN** the connection is refused (nothing listens on the LAN address)
 
-#### Scenario: Acceso directo al EC2 sin header secreto es rechazado
+#### Scenario: Request through the tunnel is served
+- **WHEN** `cloudflared` forwards a request to `http://127.0.0.1:80`
+- **THEN** nginx proxies it to `127.0.0.1:8000` (or `:8001/mcp` for `/mcp/`)
+  and returns the upstream response unchanged
 
-- **WHEN** un cliente arbitrario (no CloudFront, o CloudFront sin secret) hace `GET http://<ec2-ip>/`
-- **THEN** nginx SHALL responder `403 Forbidden` sin llegar a invocar uvicorn
+### Requirement: Real client IP from Cloudflare
 
-#### Scenario: Acceso con secret correcto desde IP fuera de la prefix list es rechazado a nivel de red
+nginx SHALL derive the client address from the `CF-Connecting-IP` header,
+trusting it only from `127.0.0.1` (the local `cloudflared`), and SHALL
+apply the `/api/*` and `/mcp/*` rate limits and access logging to that
+address.
 
-- **WHEN** un atacante conoce el secreto pero su IP no está en la prefix list de CloudFront
-- **THEN** el Security Group SHALL descartar la conexión TCP antes de que nginx vea el request
+#### Scenario: Rate limit keys on the real client
+- **WHEN** one client sends a burst above `limit_req` on `/api/*` through
+  the tunnel
+- **THEN** that client receives `503` for the excess while other clients
+  behind the same tunnel are unaffected
 
-#### Scenario: Request legítimo de CloudFront se procesa
+### Requirement: Cache behaviour by route
 
-- **WHEN** CloudFront forwardea un request con `X-Origin-Auth: <secret>` válido
-- **THEN** nginx SHALL hacer proxy a `http://127.0.0.1:8000` y devolver la respuesta de uvicorn intacta
+Cloudflare SHALL NOT cache `/api/*` or `/mcp/*` responses. Static assets
+under `/static/*` MAY be cached at the edge; the installer SHALL keep
+stamping `?v=<commit>` into static URLs so a deploy never serves stale
+assets against fresh HTML.
 
-### Requirement: Cache diferenciado por tipo de ruta
+#### Scenario: API responses are not cached
+- **WHEN** a client requests `/api/v1/snapshots/latest/` twice
+- **THEN** both responses carry `cf-cache-status: DYNAMIC` (or `BYPASS`)
 
-El sistema SHALL configurar CloudFront para no cachear rutas dinámicas y cachear estáticos versionados.
+#### Scenario: Static asset is cacheable
+- **WHEN** a client requests `/static/app.js?v=<sha>`
+- **THEN** repeated requests MAY return `cf-cache-status: HIT`
+- **AND** a new deploy changes the URL, so no client receives an old asset
 
-#### Scenario: Ruta dinámica no se cachea
+### Requirement: Edge configuration lives in the repo
 
-- **WHEN** un cliente hace `GET /` o `GET /api/<cualquier-cosa>`
-- **THEN** CloudFront SHALL aplicar la política `CachingDisabled` y forwardear cada request al origin
+The tunnel ingress rules SHALL be rendered by `deploy/install.sh` from
+`deploy/cloudflared/config.yml.template` using values in
+`/etc/alt-bitnodes/cloudflared.env`; the tunnel credentials file SHALL be
+created once at provisioning and never by the installer. Re-running the
+installer SHALL be idempotent for the tunnel, nginx and their units.
 
-#### Scenario: Asset estático se cachea en edge
+#### Scenario: Re-run leaves the tunnel up
+- **WHEN** `install.sh` runs on a host with a working tunnel and unchanged
+  `cloudflared.env`
+- **THEN** `cloudflared.service` is not restarted and the public hostname
+  stays reachable throughout
 
-- **WHEN** un cliente hace `GET /static/<archivo>`
-- **THEN** CloudFront SHALL aplicar la política `CachingOptimized` (TTL default ~1 día)
-- **AND** hits subsiguientes SHALL servirse desde edge sin tocar el origin (cabecera `X-Cache: Hit from cloudfront`)
+#### Scenario: Hostname change is picked up
+- **WHEN** `PUBLIC_HOST` in `cloudflared.env` changes and `install.sh` runs
+- **THEN** the rendered config changes, `cloudflared` restarts, and the new
+  hostname routes to nginx
 
-### Requirement: Rate limiting en el origin
+### Requirement: Operational documentation for the Cloudflare edge
 
-El nginx del EC2 SHALL aplicar rate limiting basado en la IP real del cliente (extraída de `X-Forwarded-For` poblado por CloudFront) a las rutas `/api/*`.
+`deploy/README.md` SHALL document: the nameserver move, tunnel creation,
+public hostnames and cache rules, the Access application for SSH, the
+contents of `cloudflared.env`, smoke tests, and rollback (re-pointing the
+CNAME while an alternative origin exists).
 
-#### Scenario: Cliente bajo límite es servido normalmente
-
-- **WHEN** un cliente hace menos de 20 requests/s a `/api/*`
-- **THEN** todos los requests SHALL responder `200 OK`
-
-#### Scenario: Cliente sobre límite recibe 429
-
-- **WHEN** un cliente envía una ráfaga >40 requests/s sostenida a `/api/*`
-- **THEN** los requests excedentes SHALL responder `503 Service Unavailable` (default de `limit_req`)
-- **AND** la limitación SHALL aplicar por IP real, no por IP de CloudFront
-
-### Requirement: Despliegue automatizado e idempotente
-
-El sistema SHALL persistir la configuración de edge (nginx, CloudFront stack, secret bootstrap) en el repo, y `deploy/install.sh` SHALL poder ejecutarse repetidamente sin romper el estado.
-
-#### Scenario: Bootstrap inicial
-
-- **WHEN** un operador ejecuta `aws cloudformation deploy --template-file deploy/cloudformation/edge.yaml ...` con los parámetros documentados
-- **THEN** AWS SHALL crear ACM cert, CloudFront distribution y SG ingress rule
-- **AND** los outputs SHALL incluir el dominio CloudFront, los CNAMEs de validación ACM y el ID del SG
-
-#### Scenario: Re-ejecutar install.sh
-
-- **WHEN** `deploy/install.sh` corre por segunda vez en el mismo EC2
-- **THEN** nginx SHALL seguir instalado y funcionando
-- **AND** el secret existente en `/etc/alt-bitnodes/origin-auth.env` NO SHALL ser sobrescrito
-- **AND** la config de nginx SHALL re-renderizarse desde el template (sin perder cambios manuales no soportados — si los hay, el operador lo sabe)
-
-#### Scenario: Validación de config antes de aplicar
-
-- **WHEN** `install.sh` escribe `/etc/nginx/sites-available/alt-bitnodes`
-- **THEN** SHALL ejecutar `nginx -t` antes de `systemctl reload nginx`
-- **AND** si `nginx -t` falla, install.sh SHALL salir con código no cero y no reiniciar nginx
-
-### Requirement: Documentación operativa para DNS externo
-
-El repo SHALL documentar los DNS records que el operador debe crear manualmente en el proveedor externo (Namecheap/GoDaddy/etc) y la secuencia de despliegue.
-
-#### Scenario: Operador consulta el README
-
-- **WHEN** un operador abre `deploy/README.md` para desplegar por primera vez
-- **THEN** SHALL encontrar:
-  - El comando exacto de `aws cloudformation deploy` con todos los parámetros
-  - Los tres tipos de records DNS necesarios (validación ACM, `pesquisa.hacknodes.xyz`, `origin.hacknodes.xyz`) y dónde sacar los valores
-  - El procedimiento de rotación del `OriginAuthSecret`
-  - El procedimiento de rollback
+#### Scenario: Operator provisions a fresh host
+- **WHEN** an operator follows `deploy/README.md` on a bare Ubuntu 24.04 VM
+- **THEN** they reach a serving host without consulting any AWS document
