@@ -76,6 +76,32 @@ Notes for the migration:
   3.219.165.64), review WAF (~$30/month) and CloudWatch dashboards
   (~$9/month) — they die with the AWS footprint.
 
+### The Digi router caps the crawler host's IPv4 sessions (2026-09-20)
+
+**Status**: Open, measured on the Proxmox VM during the migration
+(`migrate-to-selfhosted-proxmox`, task 3.5). The household is unaffected;
+the crawler host alone is throttled on IPv4, and IPv6 is untouched.
+
+Evidence:
+- Crawl at 1200 workers (~700 new connections/s): 627 IPv4 reachable
+  per cycle. At 40 workers (~90/s): 4842 IPv4 — the SYN-rate part.
+- Ping then holds only **~640 IPv4** sockets out of 4233 reachable, while
+  it holds all ~1000 IPv6 ones. Snapshots therefore sit at ~1.5k nodes
+  even though crawl reports ~6k.
+- Direct test: 1000 extra idle IPv4 connections to Cloudflare from the
+  VM → 164 succeed (115 s); the same from another LAN host → 1200/1200
+  in 2.2 s. The VM's IPv4 is being capped, not the line.
+- Working model: a per-host NAT entry budget shared between the crawl's
+  half-open attempts to dead addresses (each lives ~our retry window +
+  the router's SYN timeout) and the ping's established sockets.
+
+Levers being tried (one per ~2 h cycle): crawl `socket_timeout` 60 → 15
+and `max_age` upper bound 5 d → 2 d (fewer dead-address attempts, shorter
+half-open life), then crawl workers 40 → 20. The definitive fix is the
+ONT bridge + OPNsense (own conntrack), which is also what the overlays
+wait for. Until then the public snapshot shows the clearnet-behind-Digi
+number, not the network.
+
 ### Duty-cycle the crawler to stay on AWS cheaply (idea, not decided)
 
 **Status**: Idea recorded 2026-08-11, no decision. ifuensan's proposal:
