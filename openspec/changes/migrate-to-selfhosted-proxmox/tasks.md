@@ -231,7 +231,9 @@
       operator chose to). Found on inventory: the instance had become an
       m7g.large; the two "idle" EIPs no longer existed; the WAF web ACL
       belongs to the `audit.hacknodes.xyz` distribution (bitcoin-node-
-      scanner's t3.micro), so it and that distribution were left alone;
+      scanner's t3.micro); the operator later chose to drop that WAF too
+      (detached from the distribution, ACL deleted) since the t3.micro is
+      stopped — the distribution itself stays;
       the `billing-over-5usd` alarm was kept. Done: stop → snapshots
       `snap-0fe6b18ac846494b2` (root 16G) and `snap-0db8ecedd462540c2`
       (data 30G), tagged `alt-bitnodes-final-2026-09-20-*`; stack
