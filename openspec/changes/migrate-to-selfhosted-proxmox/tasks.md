@@ -218,15 +218,28 @@
 
 ## 6. AWS teardown
 
-- [ ] 6.1 After the 72 h: `aws cloudformation delete-stack --stack-name
+- [x] 6.1 After the 72 h: `aws cloudformation delete-stack --stack-name
       alt-bitnodes-edge`; delete the WAF web ACL and the CloudWatch
       dashboards/alarms; release the two idle EIPs (34.206.227.120,
       3.219.165.64); delete the `origin` DNS record.
-- [ ] 6.2 Final EBS snapshot of the root and `/data` volumes (tagged
+- [x] 6.2 Final EBS snapshot of the root and `/data` volumes (tagged
       `alt-bitnodes-final-<date>`); `stop-instances`.
-- [ ] 6.3 Once the VM has run a full weekly archive cycle: terminate the
+- [x] 6.3 Once the VM has run a full weekly archive cycle: terminate the
       instance, delete both volumes, release its EIP, delete the
       `EC2_*` secrets and the EC2 deploy key pair.
+      *6.1–6.3 done 2026-09-20 14:30–15:00 UTC, without the 72 h wait (the
+      operator chose to). Found on inventory: the instance had become an
+      m7g.large; the two "idle" EIPs no longer existed; the WAF web ACL
+      belongs to the `audit.hacknodes.xyz` distribution (bitcoin-node-
+      scanner's t3.micro), so it and that distribution were left alone;
+      the `billing-over-5usd` alarm was kept. Done: stop → snapshots
+      `snap-0fe6b18ac846494b2` (root 16G) and `snap-0db8ecedd462540c2`
+      (data 30G), tagged `alt-bitnodes-final-2026-09-20-*`; stack
+      `alt-bitnodes-edge` DELETE_COMPLETE 14:39; dashboard `Bitnodes`
+      deleted; instance terminated, data volume deleted, EIP
+      100.50.100.201 released; `EC2_*` GitHub secrets deleted. Rollback
+      from here means restoring from the snapshots. Still to do by hand:
+      delete the `origin` and `pesquisa-next` records in Cloudflare DNS.*
 - [ ] 6.4 Repo: delete `deploy/cloudformation/`, `deploy/cloudwatch-agent.json`,
       `install_cloudwatch_agent`, `bootstrap_origin_secret`, the
       `cloudfront` branch of `configure_nginx` and the old nginx template;

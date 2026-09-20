@@ -9,11 +9,14 @@ see `_bmad-output/planning-artifacts/`.
 
 ### Migrate production off AWS to self-hosted Proxmox
 
-**Status**: **Cut over 2026-09-20 14:15 UTC.** pesquisa.hacknodes.xyz is
-served by VM 114 on the home Proxmox through a Cloudflare Tunnel; the EC2
-is idle behind the still-standing CloudFront stack until the 72 h rollback
-window closes (phase 6 of
-`openspec/changes/migrate-to-selfhosted-proxmox/`). Clearnet profile only;
+**Status**: **Done. Cut over 2026-09-20 14:15 UTC; AWS torn down the same
+afternoon.** pesquisa.hacknodes.xyz is served by VM 114 on the home Proxmox
+through a Cloudflare Tunnel. The EC2, its EIP, the CloudFront stack and the
+CloudWatch dashboard are gone; two EBS snapshots
+(`alt-bitnodes-final-2026-09-20-root/-data`) remain in us-east-1 as the
+backup. Remaining repo work: phase 6.4/6.5 of
+`openspec/changes/migrate-to-selfhosted-proxmox/` (drop the CloudFront
+branch of the installer). Clearnet profile only;
 the public count is bounded by the Digi router (see the entry below) until
 the ONT bridge + OPNsense work, which the operator cannot schedule yet.
 Decided 2026-08-01. Driver: egress cost — the scaled
