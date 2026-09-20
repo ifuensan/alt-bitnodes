@@ -194,20 +194,27 @@
 
 ## 5. Cutover
 
-- [ ] 5.1 Preconditions: 3.4 green for ≥ 24 h, one archive tier written on
+- [x] 5.1 Preconditions: 3.4 green for ≥ 24 h, one archive tier written on
       the VM (`ls data/archive/`), window-stats advancing.
-- [ ] 5.2 Cloudflare DNS: `pesquisa` CNAME → `<tunnel-id>.cfargotunnel.com`,
+- [x] 5.2 Cloudflare DNS: `pesquisa` CNAME → `<tunnel-id>.cfargotunnel.com`,
       proxied; add `pesquisa` as a public hostname on the tunnel (or rename
       `pesquisa-next`); `PUBLIC_HOST=pesquisa.hacknodes.xyz` in
       `cloudflared.env`; re-run the installer.
-- [ ] 5.3 Smoke test on the real hostname; check the certificate is
+- [x] 5.3 Smoke test on the real hostname; check the certificate is
       Cloudflare's; `curl -sI https://pesquisa.hacknodes.xyz/static/app.js`
       shows `cf-cache-status`. MCP client (`claude mcp list`) still works
       with the old token.
 - [ ] 5.4 Remove `pesquisa-next`. Leave `origin.hacknodes.xyz` and the
       CloudFront stack alone for 72 h as rollback.
-- [ ] 5.5 `docs/follow-ups.md`: record cutover date and the first
+- [x] 5.5 `docs/follow-ups.md`: record cutover date and the first
       household/session observations.
+      *Cutover 2026-09-20 14:15 UTC. `pesquisa` CNAME → tunnel (proxied),
+      Cloudflare-issued Let's Encrypt cert, `/api/*` DYNAMIC, `/static/*`
+      cacheable, MCP 401/400 (auth passes with the migrated token), latest
+      snapshot served is minutes old. `pesquisa-next` no longer routes
+      (404) but its DNS record still exists — delete it in the dashboard
+      (5.4). CloudFront stack left up 72 h as rollback: recreate the
+      DNS-only CNAME to d1nqm31up9h70w.cloudfront.net.*
 
 ## 6. AWS teardown
 

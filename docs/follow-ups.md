@@ -9,10 +9,14 @@ see `_bmad-output/planning-artifacts/`.
 
 ### Migrate production off AWS to self-hosted Proxmox
 
-**Status**: In progress since 2026-09-18 — change
-`openspec/changes/migrate-to-selfhosted-proxmox/` (Cloudflare Tunnel edge,
-VM on the existing Proxmox, clearnet profile first; overlays return with
-the ONT-bridge work). Decided 2026-08-01. Driver: egress cost — the scaled
+**Status**: **Cut over 2026-09-20 14:15 UTC.** pesquisa.hacknodes.xyz is
+served by VM 114 on the home Proxmox through a Cloudflare Tunnel; the EC2
+is idle behind the still-standing CloudFront stack until the 72 h rollback
+window closes (phase 6 of
+`openspec/changes/migrate-to-selfhosted-proxmox/`). Clearnet profile only;
+the public count is bounded by the Digi router (see the entry below) until
+the ONT bridge + OPNsense work, which the operator cannot schedule yet.
+Decided 2026-08-01. Driver: egress cost — the scaled
 crawler pushes ~356 GB/day (>99% Tor/I2P overlay machinery, ~0.1%
 Bitcoin protocol), ~$22/day at AWS transfer rates (~$660/month). See
 `docs/postmortems/2026-08-01-egress-cost-anomaly-false-positive.md`
