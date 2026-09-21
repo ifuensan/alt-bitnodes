@@ -109,7 +109,23 @@ move. Not yet tried: crawl workers 40 → 20. Also note the export is taken
 this regime (where IPv4 sockets do not survive a cycle) the published
 count is the trough of the cycle, not its plateau — a ping-side
 `socket_timeout` / publish delay above 300 s would move the photo to
-after the spread. The definitive fix is the
+after the spread.
+
+**The router itself can be taken out of the path without new hardware
+(2026-09-21).** The Digi unit is a Zyxel PE5301-01 (XGS-PON, Wi-Fi 7).
+Per bandaancha (thread "Nuevo router Digi Zyxel PE5301-01", posts of
+2026-06-29 and 2026-09-03): Digi switches it to **bridge mode on request**
+(call support, ask for the PPPoE user/password — mailed instantly — and
+for bridge mode; the switch took ~1 week and happens unannounced; once in
+bridge you cannot revert it yourself, there is no admin user), and a user
+runs it with **OPNsense doing PPPoE directly on the WAN interface, no VLAN
+20** (older Digi guides say VLAN 20; on this model that breaks PPPoE).
+Digi is CG-NAT unless you have the "plus" connection; irrelevant here
+(crawler is outbound-only, dashboard goes through the tunnel). So the
+prerequisite for `full` is: OPNsense VM on frodo with a second NIC facing
+the Zyxel's LAN port, the household Wi-Fi moved to an AP (the Zyxel's
+Wi-Fi is off in bridge), then request the switch. Nothing to buy except,
+possibly, an access point. The definitive fix is the
 ONT bridge + OPNsense (own conntrack), which is also what the overlays
 wait for. Until then the public snapshot shows the clearnet-behind-Digi
 number, not the network.
