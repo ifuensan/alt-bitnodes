@@ -167,3 +167,16 @@ def test_view_rejects_counts_only_cache(tmp_path):
     ]}))
     with pytest.raises(ws.WindowMissingError):
         ws.window_view_stats(8, path=path)
+
+
+def test_24_day_window_outlives_the_8_day_one(write_snapshot, tmp_path):
+    now = ts_at(TODAY)
+    write_snapshot(ts_at(TODAY - dt.timedelta(days=10)), [make_row(address="8.8.8.8")])
+    write_snapshot(ts_at(TODAY - dt.timedelta(hours=1)), [make_row(address="1.2.3.4")])
+    nodes_path = tmp_path / "window-nodes.json"
+    stats_path = tmp_path / "s.json"
+    r = ws.write_window_stats(now=now, path=stats_path, nodes_path=nodes_path)
+    assert _win(r, 8)["ipv4"] == 1
+    assert _win(r, 24)["ipv4"] == 2
+    assert ws.load_window_nodes(24, path=nodes_path, stats_path=stats_path)["count"] == 2
+    assert ws.load_window_nodes(8, path=nodes_path, stats_path=stats_path)["count"] == 1

@@ -69,3 +69,13 @@ def test_window_view_endpoints_serve_cache(write_snapshot, data_dir):
     for days in (2, 30):
         assert client.get(f"/api/window/{days}/stats").status_code == 404
         assert client.get(f"/api/window/{days}").status_code == 404
+
+
+def test_window_24_endpoints(write_snapshot, data_dir):
+    write_snapshot(ts_at(TODAY - dt.timedelta(days=12)), [make_row(address="8.8.8.8")])
+    write_snapshot(ts_at(TODAY - dt.timedelta(hours=1)), [make_row(address="1.2.3.4")])
+    ws.write_window_stats(now=ts_at(TODAY))
+
+    assert client.get("/api/window/24/stats").json()["total"] == 2
+    assert client.get("/api/window/24").json()["count"] == 2
+    assert client.get("/api/window/8").json()["count"] == 1
