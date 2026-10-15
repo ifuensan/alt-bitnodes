@@ -73,3 +73,76 @@ def test_load_missing_cache_is_empty(tmp_path):
     assert ws.load_window_stats(path=tmp_path / "nope.json") == {
         "generated_at": None, "windows": []
     }
+
+
+def test_distribution_uses_latest_row_per_node(write_snapshot):
+    now = ts_at(TODAY)
+    # A node that moved country between sightings is counted once, with
+    # the attributes of its most recent sighting.
+    old = make_row(address="1.2.3.4", port=8333, country="DE", user_agent="/Satoshi:26.0.0/")
+    new = make_row(address="1.2.3.4", port=8333, country="US", user_agent="/Satoshi:27.0.0/")
+    other = make_row(address="5.6.7.8", port=8333, country="US", asn="AS2", asn_name="Two")
+    write_snapshot(ts_at(TODAY - dt.timedelta(days=2)), [old, other])
+    write_snapshot(ts_at(TODAY - dt.timedelta(hours=1)), [new])
+    result = ws.compute_window_stats(now=now)
+    w3 = _win(result, 3)
+    assert w3["total"] == 2
+    assert w3["distribution"]["total"] == 2
+    assert w3["distribution"]["top_countries"] == [("US", 2)]
+    # The superseded user agent of the old sighting is gone; `other` carries
+    # the default 27.0.0 agent too.
+    assert w3["distribution"]["top_user_agents"] == [("/Satoshi:27.0.0/", 2)]
+    assert w3["distribution"]["asns_total"] == 2
+    # The 1-day window only holds the fresh sighting.
+    w1 = _win(result, 1)
+    assert w1["total"] == 1
+    assert w1["distribution"]["countries_total"] == 1
+    assert w1["since"] == now - ws.DAY_SECONDS
+
+
+def test_write_splits_nodes_file_and_view_helpers(write_snapshot, tmp_path):
+    now = ts_at(TODAY)
+    stale = make_row(address="9.9.9.9", port=8333)
+    fresh = make_row(address="1.2.3.4", port=8333)
+    write_snapshot(ts_at(TODAY - dt.timedelta(days=6)), [stale])
+    write_snapshot(ts_at(TODAY - dt.timedelta(hours=1)), [fresh, stale])
+    stats_path = tmp_path / "window-stats.json"
+    nodes_path = tmp_path / "window-nodes.json"
+    data = ws.write_window_stats(now=now, path=stats_path, nodes_path=nodes_path)
+    assert "_nodes" not in data
+    assert "_nodes" not in ws.load_window_stats(stats_path)
+
+    view = ws.window_view_stats(8, path=stats_path)
+    assert view["days"] == 8 and view["snapshots"] == 2
+    assert view["total"] == 2 and view["generated_at"] == now
+    assert "top_countries" in view and "distribution" not in view
+
+    nodes8 = ws.load_window_nodes(8, path=nodes_path)
+    assert nodes8["count"] == 2
+    assert {n["address"] for n in nodes8["nodes"]} == {"1.2.3.4", "9.9.9.9"}
+    # The stale node was last seen an hour ago (it was in the fresh snapshot
+    # too), so it is in the 1-day window as well; last_seen is the latest.
+    nodes1 = ws.load_window_nodes(1, path=nodes_path)
+    assert nodes1["count"] == 2
+    assert all(n["last_seen"] == ts_at(TODAY - dt.timedelta(hours=1)) for n in nodes1["nodes"])
+
+
+def test_nodes_filter_by_last_seen(write_snapshot, tmp_path):
+    now = ts_at(TODAY)
+    write_snapshot(ts_at(TODAY - dt.timedelta(days=6)), [make_row(address="9.9.9.9")])
+    write_snapshot(ts_at(TODAY - dt.timedelta(hours=1)), [make_row(address="1.2.3.4")])
+    nodes_path = tmp_path / "window-nodes.json"
+    ws.write_window_stats(now=now, path=tmp_path / "s.json", nodes_path=nodes_path)
+    assert ws.load_window_nodes(1, path=nodes_path)["count"] == 1
+    assert ws.load_window_nodes(8, path=nodes_path)["count"] == 2
+    import pytest
+    with pytest.raises(ws.WindowMissingError):
+        ws.load_window_nodes(30, path=nodes_path)  # wider than the cache
+
+
+def test_view_helpers_raise_when_cache_missing(tmp_path):
+    import pytest
+    with pytest.raises(ws.WindowMissingError):
+        ws.window_view_stats(8, path=tmp_path / "missing.json")
+    with pytest.raises(ws.WindowMissingError):
+        ws.load_window_nodes(8, path=tmp_path / "missing.json")

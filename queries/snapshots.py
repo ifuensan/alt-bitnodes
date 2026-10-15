@@ -62,10 +62,12 @@ def known_addresses_set() -> set:
 PSEUDO_ASNS = {"TOR", "I2P"}
 
 
-def snapshot_stats(timestamp: int) -> dict:
-    """Compute distribution stats over one snapshot."""
-    rows = load_snapshot(timestamp)
+def distribution_stats(rows: list) -> dict:
+    """Distribution stats over a set of node rows (one row per node).
 
+    Shared by the per-snapshot stats and the rolling-window union, so both
+    views of the dashboard render from the same payload shape.
+    """
     countries = Counter(r[9] for r in rows if r[9])
     user_agents = Counter(r[3] for r in rows if r[3])
     asns = Counter(
@@ -86,7 +88,6 @@ def snapshot_stats(timestamp: int) -> dict:
     clearnet = len(rows) - tor - i2p
 
     return {
-        "timestamp": timestamp,
         "total": len(rows),
         "clearnet": clearnet,
         "tor": tor,
@@ -101,3 +102,9 @@ def snapshot_stats(timestamp: int) -> dict:
         "countries_iso3": countries_iso3,
         "height_histogram": dict(Counter(heights).most_common(10)),
     }
+
+
+def snapshot_stats(timestamp: int) -> dict:
+    """Compute distribution stats over one snapshot."""
+    rows = load_snapshot(timestamp)
+    return {"timestamp": timestamp, **distribution_stats(rows)}
