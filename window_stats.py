@@ -13,6 +13,10 @@ from queries.window_stats import write_window_stats
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     result = write_window_stats()
-    logging.info("window stats: %s", [w for w in result.get("windows", [])])
-    print(json.dumps(result))
+    summary = [
+        {k: w[k] for k in ("days", "snapshots", "clearnet", "tor", "i2p", "total")}
+        for w in result.get("windows", [])
+    ]
+    logging.info("window stats: %s", summary)
+    print(json.dumps(summary))
     sys.exit(0)

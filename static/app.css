@@ -119,6 +119,30 @@ header h1 {
 }
 #theme-toggle:hover { color: var(--text); }
 
+/* --- View toggle: LIVE (one snapshot) vs N-DAY UNION ---------------------- */
+.view-toggle { display: inline-flex; }
+.view-toggle button {
+  background: var(--surface); color: var(--muted);
+  border: 1px solid var(--border); border-radius: 0;
+  font-family: var(--font); font-size: 11px; font-weight: 500;
+  letter-spacing: 0.6px; text-transform: uppercase;
+  padding: var(--xs) var(--md);
+  cursor: pointer;
+}
+.view-toggle button + button { border-left: 0; }
+.view-toggle button:hover { color: var(--text); }
+.view-toggle button.active { color: var(--primary); border-color: var(--primary); }
+.view-toggle button + button.active { border-left: 1px solid var(--primary); margin-left: -1px; }
+.view-toggle button:disabled { color: var(--dim, var(--muted)); cursor: not-allowed; }
+/* The snapshot picker only makes sense in the live view; the union view
+   shows its own span of snapshots in the meta text instead. */
+body[data-view="union"] #snapshot-control { display: none; }
+/* Per-panel reminder that the figures are a union, not a snapshot. */
+.union-note { display: none; }
+body[data-view="union"] .union-note { display: inline; }
+.col-seen { display: none; white-space: nowrap; }
+body[data-view="union"] .col-seen { display: table-cell; }
+
 /* --- Header nav tabs ------------------------------------------------------ */
 .tabs { display: flex; gap: var(--sm); }
 .tabs a {

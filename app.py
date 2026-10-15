@@ -11,13 +11,16 @@ from queries import (
     EXPORT_DIR,
     NoSnapshotsError,
     SnapshotMissingError,
+    WindowMissingError,
     find_archive_file,
     group_by_ip_detail,
     latest_services_payload,
     list_archives,
     load_block,
     load_propagation,
+    load_window_nodes,
     load_window_stats,
+    window_view_stats,
     groups_by_ip,
     known_addresses_set,
     list_snapshots,
@@ -36,6 +39,7 @@ logger = logging.getLogger("alt-bitnodes")
 
 ERR_SNAPSHOT_NOT_FOUND = "snapshot not found"
 ERR_NO_SNAPSHOTS = "no snapshots available yet"
+ERR_WINDOW_NOT_FOUND = "no cached union for that window yet"
 
 # redirect_slashes disabled: a missing/extra trailing slash otherwise triggers
 # a 307 whose Location is built from the Host uvicorn sees — and CloudFront
@@ -122,6 +126,28 @@ def snapshot_stats_endpoint(timestamp: int) -> dict:
         return snapshot_stats(timestamp)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=ERR_SNAPSHOT_NOT_FOUND)
+
+
+# Windowed union view. Mirrors /api/snapshot/{ts} + /stats so the dashboard
+# renders "unique over N days" with the same code as a live snapshot. Both
+# are served from the timer-written caches (never computed per request); a
+# window the cache does not hold yet is a 404, which the toggle reads as
+# "not available", not as an error.
+
+@app.get("/api/window/{days}", responses={404: {"description": ERR_WINDOW_NOT_FOUND}})
+def window_nodes(days: int) -> dict:
+    try:
+        return load_window_nodes(days)
+    except WindowMissingError:
+        raise HTTPException(status_code=404, detail=ERR_WINDOW_NOT_FOUND)
+
+
+@app.get("/api/window/{days}/stats", responses={404: {"description": ERR_WINDOW_NOT_FOUND}})
+def window_stats_endpoint(days: int) -> dict:
+    try:
+        return window_view_stats(days)
+    except WindowMissingError:
+        raise HTTPException(status_code=404, detail=ERR_WINDOW_NOT_FOUND)
 
 
 # Latent-crawler-data sections. All three serve collector-precomputed JSON;

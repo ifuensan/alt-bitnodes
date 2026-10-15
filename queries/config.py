@@ -16,6 +16,12 @@ ARCHIVE_DIR = Path(os.environ.get("BITNODES_ARCHIVE_DIR", "data/archive"))
 WINDOW_STATS_FILE = Path(
     os.environ.get("BITNODES_WINDOW_STATS_FILE", "data/window-stats.json")
 )
+# Union node list behind the dashboard's windowed view: every node seen in
+# the widest window with its last-seen timestamp. Written next to the stats
+# cache by the same timer; served by /api/window/{days}.
+WINDOW_NODES_FILE = Path(
+    os.environ.get("BITNODES_WINDOW_NODES_FILE", "data/window-nodes.json")
+)
 SERVICES_SERIES_FILE = Path(
     os.environ.get("BITNODES_SERVICES_SERIES_FILE", "data/services-series.json")
 )

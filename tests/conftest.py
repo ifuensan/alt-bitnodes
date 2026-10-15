@@ -18,10 +18,11 @@ _DATA_DIR = Path(tempfile.mkdtemp(prefix="alt-bitnodes-test-data-"))
 os.environ["BITNODES_SERVICES_SERIES_FILE"] = str(_DATA_DIR / "services-series.json")
 os.environ["BITNODES_PROPAGATION_DIR"] = str(_DATA_DIR / "propagation")
 os.environ["BITNODES_WINDOW_STATS_FILE"] = str(_DATA_DIR / "window-stats.json")
+os.environ["BITNODES_WINDOW_NODES_FILE"] = str(_DATA_DIR / "window-nodes.json")
 
 import pytest
 
-from queries import config, nodes, services, snapshots
+from queries import config, nodes, services, snapshots, window_stats
 
 
 def make_row(**overrides) -> list:
@@ -87,6 +88,7 @@ def _clean_state(export_dir):
     snapshots._addresses_state["set"] = set()
     nodes._opendata_cache["ts"] = 0.0
     nodes._opendata_cache["index"] = {}
+    window_stats._read_window_nodes.cache_clear()
     yield
 
 

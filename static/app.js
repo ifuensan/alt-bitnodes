@@ -3,6 +3,20 @@ let currentNodes = [];
 let currentStats = null;
 let globeInitialized = false;
 
+// Two views over the same panels: "live" renders one snapshot (what is
+// reachable right now); "union" renders every unique node seen over the last
+// UNION_DAYS days — the metric bitnodes-style trackers report, and the only
+// honest one for Tor, whose connections are transient. The union is served
+// from the hourly cache (/api/window/{days}); it is never computed per
+// request, so it may be a 404 on a fresh host — the toggle then disables.
+const UNION_DAYS = 8;
+const VIEW_KEY = "pesquisa:view";
+let currentView = "live";
+// The view the visitor asked for last, which may still be loading; a later
+// click supersedes an in-flight switch (see switchView).
+let requestedView = "live";
+let switchSeq = 0;
+
 // Below this width the orthographic globe is unusable with touch gestures;
 // render a flat map instead (see dashboard-map spec).
 const mobileMapQuery = window.matchMedia("(max-width: 720px)");
@@ -219,6 +233,10 @@ function makeBarChart(containerId, labels, values, label) {
   el.replaceChildren(chart);
 }
 
+function utcStamp(ts, length = 19) {
+  return new Date(ts * 1000).toISOString().replace("T", " ").slice(0, length);
+}
+
 function updateTable(nodes) {
   const tbody = document.querySelector("#nodes-table tbody");
   tbody.innerHTML = "";
@@ -233,10 +251,20 @@ function updateTable(nodes) {
       <td>${n.city || ""}</td>
       <td>${n.asn || ""} ${n.asn_name || ""}</td>
       <td>${n.height}</td>
+      <td class="col-seen">${n.last_seen ? utcStamp(n.last_seen, 16) : ""}</td>
     `;
     frag.appendChild(tr);
   }
   tbody.appendChild(frag);
+  const note = document.getElementById("table-note");
+  if (note) {
+    const parts = [];
+    if (document.body.dataset.view === "union") parts.push(`unique over ${UNION_DAYS} days`);
+    if (nodes.length > 1000) {
+      parts.push(`first 1,000 of ${fmt.format(nodes.length)} — narrow with the filter`);
+    }
+    note.textContent = parts.join(" · ");
+  }
 }
 
 function applyFilter() {
@@ -249,6 +277,21 @@ function applyFilter() {
   updateTable(filtered);
 }
 
+// Everything below the KPI bands renders from a stats payload + node list,
+// whichever view produced them. The "right now" band is live-only and is
+// left alone by the union view (both bands stay visible, as in the matrix).
+function applyView(stats, nodes, meta) {
+  currentNodes = nodes;
+  currentStats = stats;
+  document.getElementById("kpi-countries").textContent = fmt.format(stats.countries_total);
+  document.getElementById("kpi-asns").textContent = fmt.format(stats.asns_total);
+  document.getElementById("kpi-height").textContent = stats.median_height ?? "—";
+  document.getElementById("snapshot-meta").textContent = meta;
+  document.getElementById("filter").value = "";
+  renderCharts(stats);
+  updateTable(currentNodes);
+}
+
 async function loadSnapshot(ts) {
   const t = Number(ts);
   if (!Number.isInteger(t) || t < 0) {
@@ -258,20 +301,68 @@ async function loadSnapshot(ts) {
     fetchJSON(`/api/snapshot/${t}`),
     fetchJSON(`/api/snapshot/${t}/stats`),
   ]);
-  currentNodes = snap.nodes;
-  currentStats = stats;
   document.getElementById("kpi-now-total").textContent = fmt.format(stats.total);
   document.getElementById("kpi-now-clearnet").textContent = fmt.format(stats.clearnet ?? 0);
   document.getElementById("kpi-now-tor").textContent = fmt.format(stats.tor ?? 0);
   document.getElementById("kpi-now-i2p").textContent = fmt.format(stats.i2p ?? 0);
-  document.getElementById("kpi-countries").textContent = fmt.format(stats.countries_total);
-  document.getElementById("kpi-asns").textContent = fmt.format(stats.asns_total);
-  document.getElementById("kpi-height").textContent = stats.median_height ?? "—";
-  document.getElementById("snapshot-meta").textContent =
-    new Date(ts * 1000).toISOString().replace("T", " ").slice(0, 19) + " UTC";
+  applyView(stats, snap.nodes, utcStamp(t) + " UTC");
+}
 
-  renderCharts(stats);
-  updateTable(currentNodes);
+// Union view: the N-day cache in the live view's payload shape. Resolves to
+// false (and disables the toggle) when the cache is not there yet.
+async function loadUnion(seq = switchSeq) {
+  const [statsRes, nodesRes] = await Promise.all([
+    fetch(`/api/window/${UNION_DAYS}/stats`),
+    fetch(`/api/window/${UNION_DAYS}`),
+  ]);
+  if (statsRes.status === 404 || nodesRes.status === 404) {
+    const btn = document.getElementById("view-union");
+    btn.disabled = true;
+    btn.title = `No ${UNION_DAYS}-day union cached yet`;
+    return false;
+  }
+  if (!statsRes.ok) throw new Error(`/api/window/${UNION_DAYS}/stats: ${statsRes.status}`);
+  if (!nodesRes.ok) throw new Error(`/api/window/${UNION_DAYS}: ${nodesRes.status}`);
+  const [stats, payload] = await Promise.all([statsRes.json(), nodesRes.json()]);
+  if (seq !== switchSeq) return true; // a later switch owns the panels now
+  const span = stats.since && stats.generated_at
+    ? `${utcStamp(stats.since, 10)} → ${utcStamp(stats.generated_at, 10)}`
+    : "";
+  applyView(stats, payload.nodes,
+    `union of ${fmt.format(stats.snapshots)} snapshots · ${span}`);
+  return true;
+}
+
+function setViewButtons(view) {
+  document.querySelectorAll(".view-toggle button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.view === view);
+  });
+  document.body.dataset.view = view;
+}
+
+// persist=false for the ?view= override: a shared link must not rewrite
+// the visitor's stored choice; only the buttons do.
+async function switchView(view, { persist = true } = {}) {
+  requestedView = view;
+  const seq = ++switchSeq;
+  setViewButtons(view);
+  if (view === "union") {
+    const ok = await loadUnion(seq);
+    if (seq !== switchSeq) return; // superseded by a later click
+    if (!ok) view = "live";
+  }
+  if (view === "live") {
+    const select = document.getElementById("snapshot-select");
+    if (select.value) await loadSnapshot(Number.parseInt(select.value, 10));
+    if (seq !== switchSeq) return;
+  }
+  currentView = view;
+  requestedView = view;
+  setViewButtons(view);
+  if (!persist) return;
+  try {
+    localStorage.setItem(VIEW_KEY, view);
+  } catch (e) { /* localStorage unavailable — the view still applies for the session */ }
 }
 
 // Band 3 of the KPI matrix: unique nodes over a rolling window (union
@@ -374,6 +465,11 @@ async function init() {
     select.appendChild(opt);
   }
   select.addEventListener("change", e => loadSnapshot(Number.parseInt(e.target.value, 10)));
+  document.querySelectorAll(".view-toggle button").forEach((b) => {
+    b.addEventListener("click", () => {
+      if (b.dataset.view !== requestedView) switchView(b.dataset.view).catch(reportError);
+    });
+  });
   document.getElementById("filter").addEventListener("input", applyFilter);
   setThemeToggleLabel();
   document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
@@ -392,14 +488,30 @@ async function init() {
     select.value = timestamps[timestamps.length - 1];
     await loadSnapshot(timestamps[timestamps.length - 1]);
   }
-  // Secondary band + strip load lazily after the primary KPIs.
-  loadWindowStats();
-  loadServicesStrip();
+  setViewButtons("live");
+  // ?view=union|live wins for this load (shareable link); otherwise the
+  // last choice on this browser.
+  const urlView = new URLSearchParams(location.search).get("view");
+  let storedView = urlView;
+  if (storedView !== "union" && storedView !== "live") {
+    try {
+      storedView = localStorage.getItem(VIEW_KEY) || "live";
+    } catch (e) { storedView = "live"; }
+  }
+  if (storedView === "union") await switchView("union", { persist: urlView !== "union" });
+  // Secondary band + strip load lazily after the primary KPIs; both catch
+  // and log their own errors, so the promises are deliberately not awaited.
+  void loadWindowStats();
+  void loadServicesStrip();
+}
+
+function reportError(err) {
+  console.error(err);
+  document.getElementById("snapshot-meta").textContent = "error: " + err.message;
 }
 
 try {
   await init();
 } catch (err) {
-  console.error(err);
-  document.getElementById("snapshot-meta").textContent = "error: " + err.message;
+  reportError(err);
 }

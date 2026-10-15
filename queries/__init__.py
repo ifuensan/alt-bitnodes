@@ -16,6 +16,7 @@ from queries.snapshots import (
     load_snapshot,
     snapshot_meta,
     snapshot_stats,
+    distribution_stats,
     to_dict,
     known_addresses_set,
 )
@@ -37,7 +38,12 @@ from queries.archives import (
     find_archive_file,
     list_archives,
 )
-from queries.window_stats import load_window_stats
+from queries.window_stats import (
+    WindowMissingError,
+    load_window_nodes,
+    load_window_stats,
+    window_view_stats,
+)
 from queries.services import (
     decode_services,
     latest_services_payload,
@@ -50,7 +56,10 @@ from queries.util import iso2_to_iso3
 __all__ = [
     "find_archive_file",
     "list_archives",
+    "WindowMissingError",
+    "load_window_nodes",
     "load_window_stats",
+    "window_view_stats",
     "decode_services",
     "latest_services_payload",
     "load_services_series",
@@ -65,6 +74,7 @@ __all__ = [
     "load_snapshot",
     "snapshot_meta",
     "snapshot_stats",
+    "distribution_stats",
     "to_dict",
     "known_addresses_set",
     "parse_node_id",
