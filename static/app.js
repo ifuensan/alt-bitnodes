@@ -15,9 +15,12 @@ const VIEW_KEY = "pesquisa:view";
 
 // "union" was the id of the 8-day view before there were two windows; saved
 // choices and shared links still carry it.
+const KNOWN_VIEWS = ["live", ...Object.keys(UNION_VIEWS)];
+
 function normalizeView(value) {
   if (value === "union") return "union8";
-  return value === "live" || Object.hasOwn(UNION_VIEWS, value) ? value : "live";
+  // Returns the matching constant, never the caller's string.
+  return KNOWN_VIEWS.find((v) => v === value) ?? "live";
 }
 
 function unionDays(view) {
@@ -396,7 +399,7 @@ let windowsData = [];
 
 function renderWindowBand(days) {
   const w = windowsData.find((x) => x.days === days);
-  if (!w || !w.total) return;
+  if (!w) return;
   document.getElementById("band-window-title").textContent =
     `Unique over ${w.days} days (${fmt.format(w.snapshots)} snapshots)`;
   document.getElementById("kpi-win-total").textContent = fmt.format(w.total);
@@ -413,7 +416,7 @@ async function loadWindowStats() {
     // click; say so up front.
     for (const days of Object.values(UNION_VIEWS)) {
       const w = windowsData.find((x) => x.days === days);
-      if (!w || !w.distribution) disableUnionButton(days);
+      if (!w?.distribution) disableUnionButton(days);
     }
     renderWindowBand(unionDays(document.body.dataset.view) ?? DEFAULT_UNION_DAYS);
   } catch (e) {
@@ -530,14 +533,14 @@ async function init() {
   // this browser.
   const urlView = new URLSearchParams(location.search).get("view");
   let startView;
-  if (urlView) {
+  if (urlView !== null) {
     startView = normalizeView(urlView);
   } else {
     try {
       startView = normalizeView(localStorage.getItem(VIEW_KEY));
     } catch (e) { startView = "live"; }
   }
-  if (startView !== "live") await switchView(startView, { persist: !urlView });
+  if (startView !== "live") await switchView(startView, { persist: urlView === null });
   // Secondary band + strip load lazily after the primary KPIs; both catch
   // and log their own errors, so the promises are deliberately not awaited.
   void loadWindowStats();
