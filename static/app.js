@@ -481,9 +481,10 @@ async function init() {
     } catch (e) { storedView = "live"; }
   }
   if (storedView === "union") await switchView("union");
-  // Secondary band + strip load lazily after the primary KPIs.
-  loadWindowStats();
-  loadServicesStrip();
+  // Secondary band + strip load lazily after the primary KPIs; both catch
+  // and log their own errors, so the promises are deliberately not awaited.
+  void loadWindowStats();
+  void loadServicesStrip();
 }
 
 function reportError(err) {

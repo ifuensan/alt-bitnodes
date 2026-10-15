@@ -113,9 +113,12 @@ def test_write_splits_nodes_file_and_view_helpers(write_snapshot, tmp_path):
     assert "_nodes" not in ws.load_window_stats(stats_path)
 
     view = ws.window_view_stats(8, path=stats_path)
-    assert view["days"] == 8 and view["snapshots"] == 2
-    assert view["total"] == 2 and view["generated_at"] == now
-    assert "top_countries" in view and "distribution" not in view
+    assert view["days"] == 8
+    assert view["snapshots"] == 2
+    assert view["total"] == 2
+    assert view["generated_at"] == now
+    assert "top_countries" in view
+    assert "distribution" not in view
 
     nodes8 = ws.load_window_nodes(8, path=nodes_path)
     assert nodes8["count"] == 2

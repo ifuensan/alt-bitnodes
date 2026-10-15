@@ -47,8 +47,11 @@ def test_window_view_endpoints_serve_cache(write_snapshot, data_dir):
     stats = client.get("/api/window/8/stats")
     assert stats.status_code == 200
     body = stats.json()
-    assert body["days"] == 8 and body["snapshots"] == 2
-    assert body["total"] == 2 and body["tor"] == 1 and body["clearnet"] == 1
+    assert body["days"] == 8
+    assert body["snapshots"] == 2
+    assert body["total"] == 2
+    assert body["tor"] == 1
+    assert body["clearnet"] == 1
     # Same shape as /api/snapshot/{ts}/stats so the dashboard shares renderers.
     assert body["top_countries"] == [["US", 1]]
     assert body["countries_iso3"] == [["USA", 1]]

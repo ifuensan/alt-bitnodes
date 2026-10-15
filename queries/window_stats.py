@@ -97,7 +97,7 @@ def compute_window_stats(windows_days=WINDOWS_DAYS, now: int = None) -> dict:
 
 
 def _window_entry(days: int, snapshots: int, since: int, rows: list) -> dict:
-    per_net = {n: 0 for n in NETWORKS}
+    per_net = dict.fromkeys(NETWORKS, 0)
     for r in rows:
         per_net[_classify(r[0])] += 1
     clearnet = per_net["ipv4"] + per_net["ipv6"]
