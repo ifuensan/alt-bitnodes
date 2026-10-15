@@ -16,7 +16,7 @@
 
 ## 3. Verification and delivery
 - [x] 3.1 Headless screenshots at 1400, 900 and 400 px, dark and light.
-- [ ] 3.2 Full test suite; PR; CI + review gates.
-- [ ] 3.3 Deploy; run the window job on the VM and time it; verify both
+- [x] 3.2 Full test suite; PR; CI + review gates.
+- [x] 3.3 Deploy; run the window job on the VM and time it; verify both
       endpoints and the button in production.
-- [ ] 3.4 Archive the change, sync specs, README, Logseq and memory.
+- [x] 3.4 Archive the change, sync specs, README, Logseq and memory.
