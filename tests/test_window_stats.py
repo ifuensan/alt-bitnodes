@@ -111,6 +111,10 @@ def test_write_splits_nodes_file_and_view_helpers(write_snapshot, tmp_path):
     data = ws.write_window_stats(now=now, path=stats_path, nodes_path=nodes_path)
     assert "_nodes" not in data
     assert "_nodes" not in ws.load_window_stats(stats_path)
+    import pytest
+    # A day count the stats cache does not hold is unavailable for nodes too.
+    with pytest.raises(ws.WindowMissingError):
+        ws.load_window_nodes(2, path=nodes_path, stats_path=stats_path)
 
     view = ws.window_view_stats(8, path=stats_path)
     assert view["days"] == 8
@@ -120,12 +124,12 @@ def test_write_splits_nodes_file_and_view_helpers(write_snapshot, tmp_path):
     assert "top_countries" in view
     assert "distribution" not in view
 
-    nodes8 = ws.load_window_nodes(8, path=nodes_path)
+    nodes8 = ws.load_window_nodes(8, path=nodes_path, stats_path=stats_path)
     assert nodes8["count"] == 2
     assert {n["address"] for n in nodes8["nodes"]} == {"1.2.3.4", "9.9.9.9"}
     # The stale node was last seen an hour ago (it was in the fresh snapshot
     # too), so it is in the 1-day window as well; last_seen is the latest.
-    nodes1 = ws.load_window_nodes(1, path=nodes_path)
+    nodes1 = ws.load_window_nodes(1, path=nodes_path, stats_path=stats_path)
     assert nodes1["count"] == 2
     assert all(n["last_seen"] == ts_at(TODAY - dt.timedelta(hours=1)) for n in nodes1["nodes"])
 
@@ -135,12 +139,13 @@ def test_nodes_filter_by_last_seen(write_snapshot, tmp_path):
     write_snapshot(ts_at(TODAY - dt.timedelta(days=6)), [make_row(address="9.9.9.9")])
     write_snapshot(ts_at(TODAY - dt.timedelta(hours=1)), [make_row(address="1.2.3.4")])
     nodes_path = tmp_path / "window-nodes.json"
-    ws.write_window_stats(now=now, path=tmp_path / "s.json", nodes_path=nodes_path)
-    assert ws.load_window_nodes(1, path=nodes_path)["count"] == 1
-    assert ws.load_window_nodes(8, path=nodes_path)["count"] == 2
+    stats_path = tmp_path / "s.json"
+    ws.write_window_stats(now=now, path=stats_path, nodes_path=nodes_path)
+    assert ws.load_window_nodes(1, path=nodes_path, stats_path=stats_path)["count"] == 1
+    assert ws.load_window_nodes(8, path=nodes_path, stats_path=stats_path)["count"] == 2
     import pytest
     with pytest.raises(ws.WindowMissingError):
-        ws.load_window_nodes(30, path=nodes_path)  # wider than the cache
+        ws.load_window_nodes(30, path=nodes_path, stats_path=stats_path)  # wider than the cache
 
 
 def test_view_helpers_raise_when_cache_missing(tmp_path):

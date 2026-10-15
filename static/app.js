@@ -12,6 +12,10 @@ let globeInitialized = false;
 const UNION_DAYS = 8;
 const VIEW_KEY = "pesquisa:view";
 let currentView = "live";
+// The view the visitor asked for last, which may still be loading; a later
+// click supersedes an in-flight switch (see switchView).
+let requestedView = "live";
+let switchSeq = 0;
 
 // Below this width the orthographic globe is unusable with touch gestures;
 // render a flat map instead (see dashboard-map spec).
@@ -254,9 +258,12 @@ function updateTable(nodes) {
   tbody.appendChild(frag);
   const note = document.getElementById("table-note");
   if (note) {
-    note.textContent = nodes.length > 1000
-      ? `first 1,000 of ${fmt.format(nodes.length)} — narrow with the filter`
-      : "";
+    const parts = [];
+    if (document.body.dataset.view === "union") parts.push(`unique over ${UNION_DAYS} days`);
+    if (nodes.length > 1000) {
+      parts.push(`first 1,000 of ${fmt.format(nodes.length)} — narrow with the filter`);
+    }
+    note.textContent = parts.join(" · ");
   }
 }
 
@@ -303,7 +310,7 @@ async function loadSnapshot(ts) {
 
 // Union view: the N-day cache in the live view's payload shape. Resolves to
 // false (and disables the toggle) when the cache is not there yet.
-async function loadUnion() {
+async function loadUnion(seq = switchSeq) {
   const [statsRes, nodesRes] = await Promise.all([
     fetch(`/api/window/${UNION_DAYS}/stats`),
     fetch(`/api/window/${UNION_DAYS}`),
@@ -317,6 +324,7 @@ async function loadUnion() {
   if (!statsRes.ok) throw new Error(`/api/window/${UNION_DAYS}/stats: ${statsRes.status}`);
   if (!nodesRes.ok) throw new Error(`/api/window/${UNION_DAYS}: ${nodesRes.status}`);
   const [stats, payload] = await Promise.all([statsRes.json(), nodesRes.json()]);
+  if (seq !== switchSeq) return true; // a later switch owns the panels now
   const span = stats.since && stats.generated_at
     ? `${utcStamp(stats.since, 10)} → ${utcStamp(stats.generated_at, 10)}`
     : "";
@@ -332,17 +340,26 @@ function setViewButtons(view) {
   document.body.dataset.view = view;
 }
 
-async function switchView(view) {
+// persist=false for the ?view= override: a shared link must not rewrite
+// the visitor's stored choice; only the buttons do.
+async function switchView(view, { persist = true } = {}) {
+  requestedView = view;
+  const seq = ++switchSeq;
+  setViewButtons(view);
   if (view === "union") {
-    const ok = await loadUnion();
+    const ok = await loadUnion(seq);
+    if (seq !== switchSeq) return; // superseded by a later click
     if (!ok) view = "live";
   }
   if (view === "live") {
     const select = document.getElementById("snapshot-select");
     if (select.value) await loadSnapshot(Number.parseInt(select.value, 10));
+    if (seq !== switchSeq) return;
   }
   currentView = view;
+  requestedView = view;
   setViewButtons(view);
+  if (!persist) return;
   try {
     localStorage.setItem(VIEW_KEY, view);
   } catch (e) { /* localStorage unavailable — the view still applies for the session */ }
@@ -450,7 +467,7 @@ async function init() {
   select.addEventListener("change", e => loadSnapshot(Number.parseInt(e.target.value, 10)));
   document.querySelectorAll(".view-toggle button").forEach((b) => {
     b.addEventListener("click", () => {
-      if (b.dataset.view !== currentView) switchView(b.dataset.view).catch(reportError);
+      if (b.dataset.view !== requestedView) switchView(b.dataset.view).catch(reportError);
     });
   });
   document.getElementById("filter").addEventListener("input", applyFilter);
@@ -474,13 +491,14 @@ async function init() {
   setViewButtons("live");
   // ?view=union|live wins for this load (shareable link); otherwise the
   // last choice on this browser.
-  let storedView = new URLSearchParams(location.search).get("view");
+  const urlView = new URLSearchParams(location.search).get("view");
+  let storedView = urlView;
   if (storedView !== "union" && storedView !== "live") {
     try {
       storedView = localStorage.getItem(VIEW_KEY) || "live";
     } catch (e) { storedView = "live"; }
   }
-  if (storedView === "union") await switchView("union");
+  if (storedView === "union") await switchView("union", { persist: urlView !== "union" });
   // Secondary band + strip load lazily after the primary KPIs; both catch
   // and log their own errors, so the promises are deliberately not awaited.
   void loadWindowStats();

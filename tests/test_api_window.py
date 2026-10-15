@@ -65,6 +65,7 @@ def test_window_view_endpoints_serve_cache(write_snapshot, data_dir):
 
     # A 1-day window is served from the same file.
     assert client.get("/api/window/1/stats").json()["total"] == 2
-    # Not a configured window → 404, not an error.
-    assert client.get("/api/window/30/stats").status_code == 404
-    assert client.get("/api/window/30").status_code == 404
+    # Not a configured window → 404 from both endpoints, not an error.
+    for days in (2, 30):
+        assert client.get(f"/api/window/{days}/stats").status_code == 404
+        assert client.get(f"/api/window/{days}").status_code == 404

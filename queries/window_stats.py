@@ -97,6 +97,7 @@ def compute_window_stats(windows_days=WINDOWS_DAYS, now: int = None) -> dict:
 
 
 def _window_entry(days: int, snapshots: int, since: int, rows: list) -> dict:
+    """Counts per network plus the distribution for one window's rows."""
     per_net = dict.fromkeys(NETWORKS, 0)
     for r in rows:
         per_net[_classify(r[0])] += 1
@@ -116,6 +117,7 @@ def _window_entry(days: int, snapshots: int, since: int, rows: list) -> dict:
 
 
 def _empty_window(days: int) -> dict:
+    """Entry for a window with no snapshots (fresh host, empty export dir)."""
     return {
         "days": days, "snapshots": 0, "since": None, "ipv4": 0, "ipv6": 0,
         "clearnet": 0, "tor": 0, "i2p": 0, "total": 0,
@@ -124,6 +126,7 @@ def _empty_window(days: int) -> dict:
 
 
 def _write_atomic(path: Path, payload: dict) -> None:
+    """Write JSON via a temp file + rename so readers never see a partial file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(payload))
@@ -132,6 +135,7 @@ def _write_atomic(path: Path, payload: dict) -> None:
 
 def write_window_stats(now: int = None, path: Path = None,
                        nodes_path: Path = None) -> dict:
+    """Compute the union and write both caches (stats, widest-window nodes)."""
     path = path or WINDOW_STATS_FILE
     nodes_path = nodes_path or WINDOW_NODES_FILE
     data = compute_window_stats(now=now)
@@ -181,21 +185,26 @@ def window_view_stats(days: int, path: Path = None) -> dict:
 
 @lru_cache(maxsize=4)
 def _read_window_nodes(path: str, mtime_ns: int) -> dict:
+    """Parse the node cache once per rewrite."""
     # mtime_ns is part of the key so a rewrite by the timer invalidates the
     # cached parse; the file is a few MB and is read once per rewrite.
     return json.loads(Path(path).read_text())
 
 
-def load_window_nodes(days: int, path: Path = None) -> dict:
+def load_window_nodes(days: int, path: Path = None, stats_path: Path = None) -> dict:
     """Nodes of the `days`-day union as dicts (row fields + `last_seen`).
 
     Served from the widest-window file, filtered by last-seen >= cutoff.
-    Raises WindowMissingError if the cache is absent or `days` exceeds the
-    window it was built for.
+    Raises WindowMissingError if the cache is absent or `days` is not one of
+    the windows the stats cache holds — so this endpoint and the stats one
+    agree on which windows exist.
     """
     path = path or WINDOW_NODES_FILE
     if not path.exists():
         raise WindowMissingError("no cached union nodes yet")
+    cached_days = {w.get("days") for w in load_window_stats(stats_path).get("windows", [])}
+    if days not in cached_days:
+        raise WindowMissingError(f"no cached union for a {days}-day window")
     try:
         data = _read_window_nodes(str(path), path.stat().st_mtime_ns)
     except (json.JSONDecodeError, OSError):

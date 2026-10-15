@@ -140,7 +140,7 @@ body[data-view="union"] #snapshot-control { display: none; }
 /* Per-panel reminder that the figures are a union, not a snapshot. */
 .union-note { display: none; }
 body[data-view="union"] .union-note { display: inline; }
-.col-seen { display: none; }
+.col-seen { display: none; white-space: nowrap; }
 body[data-view="union"] .col-seen { display: table-cell; }
 
 /* --- Header nav tabs ------------------------------------------------------ */
