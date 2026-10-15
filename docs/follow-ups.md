@@ -16,7 +16,13 @@ after the dashboard's own `git fetch` had succeeded. The dashboard checkout
 was already reset to the new commit, so the host served the new HTML/JS
 against the old, un-restarted backend until a manual `workflow_dispatch`
 re-run finished the install (the union toggle disabled itself cleanly in
-the meantime). Options: retry the crawler fetch a few times with a short
+the meantime). The next push failed the same way at the *dashboard's* fetch,
+and the third attempt went through. Measured from the VM at the time:
+`curl -4 https://github.com/` connected in 11 s, then 1 s, then timed out,
+with the clearnet crawler holding ~1,950 established sessions — i.e. the
+Digi router's per-host SYN throttling of VM 114 (see the frodo notes), not
+a GitHub outage. Until the ONT bridge + OPNsense, expect roughly one deploy
+in three to need a `workflow_dispatch` re-run. Options: retry the crawler fetch a few times with a short
 timeout inside `install.sh`; or skip the crawler update when the fetch
 fails and the profile has not changed, and only fail the deploy if the
 dashboard half cannot complete.
