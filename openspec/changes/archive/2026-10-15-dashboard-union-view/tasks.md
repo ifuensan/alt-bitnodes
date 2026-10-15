@@ -31,6 +31,12 @@
 
 ## 4. Deploy
 
-- [ ] 4.1 Push, CI green; first timer run on VM 114 writes both caches.
-- [ ] 4.2 Verify on pesquisa.hacknodes.xyz: toggle enabled, union view
-      renders, LIVE unchanged.
+- [x] 4.1 Merged (PR #1); first deploy run died on a transient `git fetch`
+      timeout to github.com from the VM, re-run by hand succeeded; the
+      window job was started manually on VM 114 and wrote both caches.
+- [x] 4.2 Verified on pesquisa.hacknodes.xyz (2026-10-15): union of 310
+      snapshots, 6,408 nodes / 95 countries / 1,083 ASNs vs 1,832 live;
+      both views render; `/api/window/8` 2.3 MB in 145 ms.
+- [x] 4.3 Hardening found in production: a counts-only cache left from the
+      previous job version made `/api/window/8/stats` answer 200 without
+      the distribution; the view reader now treats it as missing (404).

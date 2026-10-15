@@ -7,6 +7,21 @@ see `_bmad-output/planning-artifacts/`.
 
 ## Operational
 
+### Deploy dies on a transient GitHub fetch from the VM
+
+Seen 2026-10-15 (first deploy of PR #1): `install.sh` → "Updating
+~/bitnodes" → `fatal: unable to access 'https://github.com/ifuensan/bitnodes.git/':
+Failed to connect to github.com port 443 after 133564 ms`, ten seconds
+after the dashboard's own `git fetch` had succeeded. The dashboard checkout
+was already reset to the new commit, so the host served the new HTML/JS
+against the old, un-restarted backend until a manual `workflow_dispatch`
+re-run finished the install (the union toggle disabled itself cleanly in
+the meantime). Options: retry the crawler fetch a few times with a short
+timeout inside `install.sh`; or skip the crawler update when the fetch
+fails and the profile has not changed, and only fail the deploy if the
+dashboard half cannot complete.
+
+
 ### Migrate production off AWS to self-hosted Proxmox
 
 **Status**: **Done. Cut over 2026-09-20 14:15 UTC; AWS torn down the same

@@ -154,3 +154,16 @@ def test_view_helpers_raise_when_cache_missing(tmp_path):
         ws.window_view_stats(8, path=tmp_path / "missing.json")
     with pytest.raises(ws.WindowMissingError):
         ws.load_window_nodes(8, path=tmp_path / "missing.json")
+
+
+def test_view_rejects_counts_only_cache(tmp_path):
+    # Cache format from before the distribution block existed (e.g. the
+    # file left on a host across the deploy): the view endpoint must 404.
+    import json, pytest
+    path = tmp_path / "window-stats.json"
+    path.write_text(json.dumps({"generated_at": 1, "windows": [
+        {"days": 8, "snapshots": 3, "ipv4": 1, "ipv6": 0, "clearnet": 1,
+         "tor": 0, "i2p": 0, "total": 1},
+    ]}))
+    with pytest.raises(ws.WindowMissingError):
+        ws.window_view_stats(8, path=path)

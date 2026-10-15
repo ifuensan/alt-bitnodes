@@ -173,7 +173,9 @@ def window_view_stats(days: int, path: Path = None) -> dict:
     """
     data = load_window_stats(path)
     entry = next((w for w in data.get("windows", []) if w.get("days") == days), None)
-    if entry is None or not entry.get("snapshots"):
+    # A cache written by the pre-distribution job (counts only) is not
+    # renderable as a view: treat it like no cache until the timer rewrites it.
+    if entry is None or not entry.get("snapshots") or "distribution" not in entry:
         raise WindowMissingError(f"no cached union for a {days}-day window")
     meta = {k: v for k, v in entry.items() if k != "distribution"}
     return {
