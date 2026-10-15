@@ -28,8 +28,10 @@ from queries.util import classify_network as _classify
 
 # 5 days matches the upstream crawler's max node-age (max_age up to 432000s),
 # so it's the exact apples-to-apples window vs bitnodes-style trackers; 8 days
-# matches bitnod.es's stated pruning; 1/3 bracket the recent-config figure.
-WINDOWS_DAYS = (1, 3, 5, 8)
+# matches bitnod.es's stated pruning; 1/3 bracket the recent-config figure;
+# 24 shows how much of the 8-day population persists (raw exports are kept
+# 90 days, so the data is on disk).
+WINDOWS_DAYS = (1, 3, 5, 8, 24)
 DAY_SECONDS = 86400
 NETWORKS = ("ipv4", "ipv6", "tor", "i2p")
 

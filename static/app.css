@@ -91,7 +91,8 @@ body {
 
 /* --- Header --------------------------------------------------------------- */
 header {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: var(--sm) var(--lg);
   padding: var(--lg) var(--xl);
   border-bottom: 1px solid var(--border);
 }
@@ -100,10 +101,31 @@ header h1 {
   font-size: 17px; font-weight: 500; line-height: 1.4;
   color: var(--primary);
 }
+/* First row: title, tabs, theme toggle pushed to the right edge. */
 .controls {
   display: flex; gap: var(--lg); align-items: center;
+  margin-left: auto;
   font-size: 11px; color: var(--muted);
 }
+/* Second row (Overview): view toggle, snapshot picker, meta line. Wraps
+   instead of overflowing; the meta line shrinks and sits at the right edge
+   when there is room. */
+.toolbar {
+  flex-basis: 100%;
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: var(--sm) var(--lg);
+  padding-top: var(--sm);
+  border-top: 1px solid var(--border-dim);
+  font-size: 11px; color: var(--muted);
+}
+.toolbar select {
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border);
+  font-family: var(--font); font-size: 12px;
+  padding: var(--xs) var(--sm); border-radius: 0;
+  max-width: 100%;
+}
+#snapshot-meta { flex: 1 1 16em; min-width: 0; text-align: right; overflow-wrap: anywhere; }
 .controls select {
   background: var(--surface); color: var(--text);
   border: 1px solid var(--border);
@@ -120,7 +142,7 @@ header h1 {
 #theme-toggle:hover { color: var(--text); }
 
 /* --- View toggle: LIVE (one snapshot) vs N-DAY UNION ---------------------- */
-.view-toggle { display: inline-flex; }
+.view-toggle { display: inline-flex; flex-wrap: wrap; }
 .view-toggle button {
   background: var(--surface); color: var(--muted);
   border: 1px solid var(--border); border-radius: 0;
@@ -136,12 +158,12 @@ header h1 {
 .view-toggle button:disabled { color: var(--dim, var(--muted)); cursor: not-allowed; }
 /* The snapshot picker only makes sense in the live view; the union view
    shows its own span of snapshots in the meta text instead. */
-body[data-view="union"] #snapshot-control { display: none; }
+body[data-view^="union"] #snapshot-control { display: none; }
 /* Per-panel reminder that the figures are a union, not a snapshot. */
 .union-note { display: none; }
-body[data-view="union"] .union-note { display: inline; }
+body[data-view^="union"] .union-note { display: inline; }
 .col-seen { display: none; white-space: nowrap; }
-body[data-view="union"] .col-seen { display: table-cell; }
+body[data-view^="union"] .col-seen { display: table-cell; }
 
 /* --- Header nav tabs ------------------------------------------------------ */
 .tabs { display: flex; gap: var(--sm); }
@@ -193,6 +215,8 @@ body[data-view="union"] .col-seen { display: table-cell; }
 }
 .services-strip:hover { color: var(--primary); }
 @media (max-width: 720px) {
+  header { padding: var(--md); }
+  #snapshot-meta { text-align: left; flex-basis: 100%; }
   .kpi-layout { grid-template-columns: 1fr; }
   .band-cells { grid-template-columns: repeat(2, 1fr); }
 }

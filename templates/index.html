@@ -28,18 +28,21 @@
     <a href="/archive">Archive</a>
   </nav>
   <div class="controls">
-    <!-- Two readings of the same network: one snapshot (what is reachable
-         right now) or the union of every node seen over the last N days,
-         rendered through the same panels. -->
+    <button id="theme-toggle" type="button" aria-label="Toggle theme"></button>
+  </div>
+  <!-- Second row: one reading of the network per button — a single snapshot
+       (what is reachable right now) or the union of every node seen over the
+       last N days, rendered through the same panels. -->
+  <div class="toolbar">
     <div class="view-toggle">
       <button type="button" data-view="live" class="active">LIVE</button>
-      <button type="button" data-view="union" id="view-union" title="Unique nodes seen over the last 8 days">8-DAY UNION</button>
+      <button type="button" data-view="union8" data-days="8" id="view-union8" title="Unique nodes seen over the last 8 days">8-DAY UNION</button>
+      <button type="button" data-view="union24" data-days="24" id="view-union24" title="Unique nodes seen over the last 24 days">24-DAY UNION</button>
     </div>
     <label id="snapshot-control">Snapshot:
       <select id="snapshot-select"></select>
     </label>
     <span id="snapshot-meta"></span>
-    <button id="theme-toggle" type="button" aria-label="Toggle theme"></button>
   </div>
 </header>
 
@@ -78,7 +81,7 @@
 <section class="grid">
   <div class="panel map-panel">
     <div class="panel-head">
-      <h2>Distribution<span class="union-note"> — unique over 8 days</span></h2>
+      <h2>Distribution<span class="union-note"> — unique over <span class="union-days">8</span> days</span></h2>
       <button id="map-reset" type="button" aria-label="Reset map view">RESET</button>
     </div>
     <div id="globe"></div>
@@ -86,21 +89,21 @@
   <div class="panel">
     <div class="panel-head">
       <h2>Top countries</h2>
-      <span class="panel-note union-note">unique over 8 days</span>
+      <span class="panel-note union-note">unique over <span class="union-days">8</span> days</span>
     </div>
     <div id="chart-countries" class="plot"></div>
   </div>
   <div class="panel panel-full">
     <div class="panel-head">
       <h2>Top user agents</h2>
-      <span class="panel-note union-note">unique over 8 days</span>
+      <span class="panel-note union-note">unique over <span class="union-days">8</span> days</span>
     </div>
     <div id="chart-uas" class="plot"></div>
   </div>
   <div class="panel panel-full">
     <div class="panel-head">
       <h2>Top ASNs — clearnet</h2>
-      <span class="panel-note">Tor and I2P nodes excluded (no ASN applies)<span class="union-note"> · unique over 8 days</span></span>
+      <span class="panel-note">Tor and I2P nodes excluded (no ASN applies)<span class="union-note"> · unique over <span class="union-days">8</span> days</span></span>
     </div>
     <div id="chart-asns" class="plot"></div>
   </div>

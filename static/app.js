@@ -3,14 +3,29 @@ let currentNodes = [];
 let currentStats = null;
 let globeInitialized = false;
 
-// Two views over the same panels: "live" renders one snapshot (what is
-// reachable right now); "union" renders every unique node seen over the last
-// UNION_DAYS days — the metric bitnodes-style trackers report, and the only
-// honest one for Tor, whose connections are transient. The union is served
-// from the hourly cache (/api/window/{days}); it is never computed per
-// request, so it may be a 404 on a fresh host — the toggle then disables.
-const UNION_DAYS = 8;
+// Views over the same panels: "live" renders one snapshot (what is reachable
+// right now); each union view renders every unique node seen over its window
+// — the metric bitnodes-style trackers report, and the only honest one for
+// Tor, whose connections are transient. A union is served from the hourly
+// cache (/api/window/{days}); it is never computed per request, so a window
+// may be a 404 on a fresh host — its button then disables on its own.
+const UNION_VIEWS = { union8: 8, union24: 24 };
+const DEFAULT_UNION_DAYS = 8;
 const VIEW_KEY = "pesquisa:view";
+
+// "union" was the id of the 8-day view before there were two windows; saved
+// choices and shared links still carry it.
+const KNOWN_VIEWS = ["live", ...Object.keys(UNION_VIEWS)];
+
+function normalizeView(value) {
+  if (value === "union") return "union8";
+  // Returns the matching constant, never the caller's string.
+  return KNOWN_VIEWS.find((v) => v === value) ?? "live";
+}
+
+function unionDays(view) {
+  return Object.hasOwn(UNION_VIEWS, view) ? UNION_VIEWS[view] : null;
+}
 let currentView = "live";
 // The view the visitor asked for last, which may still be loading; a later
 // click supersedes an in-flight switch (see switchView).
@@ -259,7 +274,8 @@ function updateTable(nodes) {
   const note = document.getElementById("table-note");
   if (note) {
     const parts = [];
-    if (document.body.dataset.view === "union") parts.push(`unique over ${UNION_DAYS} days`);
+    const days = unionDays(document.body.dataset.view);
+    if (days) parts.push(`unique over ${days} days`);
     if (nodes.length > 1000) {
       parts.push(`first 1,000 of ${fmt.format(nodes.length)} — narrow with the filter`);
     }
@@ -308,21 +324,26 @@ async function loadSnapshot(ts) {
   applyView(stats, snap.nodes, utcStamp(t) + " UTC");
 }
 
+function disableUnionButton(days) {
+  const btn = document.getElementById(`view-union${days}`);
+  if (!btn) return;
+  btn.disabled = true;
+  btn.title = `No ${days}-day union cached yet`;
+}
+
 // Union view: the N-day cache in the live view's payload shape. Resolves to
-// false (and disables the toggle) when the cache is not there yet.
-async function loadUnion(seq = switchSeq) {
+// false (and disables that window's button) when the cache is not there yet.
+async function loadUnion(days, seq = switchSeq) {
   const [statsRes, nodesRes] = await Promise.all([
-    fetch(`/api/window/${UNION_DAYS}/stats`),
-    fetch(`/api/window/${UNION_DAYS}`),
+    fetch(`/api/window/${days}/stats`),
+    fetch(`/api/window/${days}`),
   ]);
   if (statsRes.status === 404 || nodesRes.status === 404) {
-    const btn = document.getElementById("view-union");
-    btn.disabled = true;
-    btn.title = `No ${UNION_DAYS}-day union cached yet`;
+    disableUnionButton(days);
     return false;
   }
-  if (!statsRes.ok) throw new Error(`/api/window/${UNION_DAYS}/stats: ${statsRes.status}`);
-  if (!nodesRes.ok) throw new Error(`/api/window/${UNION_DAYS}: ${nodesRes.status}`);
+  if (!statsRes.ok) throw new Error(`/api/window/${days}/stats: ${statsRes.status}`);
+  if (!nodesRes.ok) throw new Error(`/api/window/${days}: ${nodesRes.status}`);
   const [stats, payload] = await Promise.all([statsRes.json(), nodesRes.json()]);
   if (seq !== switchSeq) return true; // a later switch owns the panels now
   const span = stats.since && stats.generated_at
@@ -338,6 +359,11 @@ function setViewButtons(view) {
     b.classList.toggle("active", b.dataset.view === view);
   });
   document.body.dataset.view = view;
+  const days = unionDays(view);
+  document.querySelectorAll(".union-days").forEach((el) => {
+    el.textContent = days ?? DEFAULT_UNION_DAYS;
+  });
+  renderWindowBand(days ?? DEFAULT_UNION_DAYS);
 }
 
 // persist=false for the ?view= override: a shared link must not rewrite
@@ -346,8 +372,9 @@ async function switchView(view, { persist = true } = {}) {
   requestedView = view;
   const seq = ++switchSeq;
   setViewButtons(view);
-  if (view === "union") {
-    const ok = await loadUnion(seq);
+  const days = unionDays(view);
+  if (days) {
+    const ok = await loadUnion(days, seq);
     if (seq !== switchSeq) return; // superseded by a later click
     if (!ok) view = "live";
   }
@@ -365,20 +392,33 @@ async function switchView(view, { persist = true } = {}) {
   } catch (e) { /* localStorage unavailable — the view still applies for the session */ }
 }
 
-// Band 3 of the KPI matrix: unique nodes over a rolling window (union
-// across snapshots) — the metric bitnodes-style trackers report.
+// Band 2 of the KPI matrix: unique nodes over a rolling window (union
+// across snapshots) — the metric bitnodes-style trackers report. It follows
+// the active union view and shows the default window while LIVE.
+let windowsData = [];
+
+function renderWindowBand(days) {
+  const w = windowsData.find((x) => x.days === days);
+  if (!w) return;
+  document.getElementById("band-window-title").textContent =
+    `Unique over ${w.days} days (${fmt.format(w.snapshots)} snapshots)`;
+  document.getElementById("kpi-win-total").textContent = fmt.format(w.total);
+  document.getElementById("kpi-win-clearnet").textContent = fmt.format(w.clearnet);
+  document.getElementById("kpi-win-tor").textContent = fmt.format(w.tor);
+  document.getElementById("kpi-win-i2p").textContent = fmt.format(w.i2p);
+}
+
 async function loadWindowStats() {
   try {
     const data = await fetchJSON("/api/v1/stats/window");
-    const w = (data.windows || []).find((x) => x.days === 8)
-      || (data.windows || []).slice(-1)[0];
-    if (!w || !w.total) return;
-    document.getElementById("band-window-title").textContent =
-      `Unique over ${w.days} days (${fmt.format(w.snapshots)} snapshots)`;
-    document.getElementById("kpi-win-total").textContent = fmt.format(w.total);
-    document.getElementById("kpi-win-clearnet").textContent = fmt.format(w.clearnet);
-    document.getElementById("kpi-win-tor").textContent = fmt.format(w.tor);
-    document.getElementById("kpi-win-i2p").textContent = fmt.format(w.i2p);
+    windowsData = data.windows || [];
+    // A union button whose window is not in the cache would only 404 on
+    // click; say so up front.
+    for (const days of Object.values(UNION_VIEWS)) {
+      const w = windowsData.find((x) => x.days === days);
+      if (!w?.distribution) disableUnionButton(days);
+    }
+    renderWindowBand(unionDays(document.body.dataset.view) ?? DEFAULT_UNION_DAYS);
   } catch (e) {
     // Missing data leaves the band's em-dashes; a real error (e.g. a
     // renamed element id) must still surface, not hide as "no data".
@@ -489,16 +529,18 @@ async function init() {
     await loadSnapshot(timestamps[timestamps.length - 1]);
   }
   setViewButtons("live");
-  // ?view=union|live wins for this load (shareable link); otherwise the
-  // last choice on this browser.
+  // ?view= wins for this load (shareable link); otherwise the last choice on
+  // this browser.
   const urlView = new URLSearchParams(location.search).get("view");
-  let storedView = urlView;
-  if (storedView !== "union" && storedView !== "live") {
+  let startView;
+  if (urlView !== null) {
+    startView = normalizeView(urlView);
+  } else {
     try {
-      storedView = localStorage.getItem(VIEW_KEY) || "live";
-    } catch (e) { storedView = "live"; }
+      startView = normalizeView(localStorage.getItem(VIEW_KEY));
+    } catch (e) { startView = "live"; }
   }
-  if (storedView === "union") await switchView("union", { persist: urlView !== "union" });
+  if (startView !== "live") await switchView(startView, { persist: urlView === null });
   // Secondary band + strip load lazily after the primary KPIs; both catch
   // and log their own errors, so the promises are deliberately not awaited.
   void loadWindowStats();
