@@ -18,6 +18,8 @@ from queries import (
     list_archives,
     load_block,
     load_propagation,
+    best_view_stats,
+    load_best_nodes,
     load_window_nodes,
     load_window_stats,
     window_view_stats,
@@ -148,6 +150,29 @@ def window_stats_endpoint(days: int) -> dict:
         return window_view_stats(days)
     except WindowMissingError:
         raise HTTPException(status_code=404, detail=ERR_WINDOW_NOT_FOUND)
+
+
+# BEST view: the frozen union of everything up to a fixed date (queries/
+# best_union.py). Declared before nothing else clashes: /api/best is not a
+# window. 404 until it has been built.
+
+ERR_BEST_NOT_FOUND = "no frozen best union built yet"
+
+
+@app.get("/api/best", responses={404: {"description": ERR_BEST_NOT_FOUND}})
+def best_nodes() -> dict:
+    try:
+        return load_best_nodes()
+    except WindowMissingError:
+        raise HTTPException(status_code=404, detail=ERR_BEST_NOT_FOUND)
+
+
+@app.get("/api/best/stats", responses={404: {"description": ERR_BEST_NOT_FOUND}})
+def best_stats_endpoint() -> dict:
+    try:
+        return best_view_stats()
+    except WindowMissingError:
+        raise HTTPException(status_code=404, detail=ERR_BEST_NOT_FOUND)
 
 
 # Latent-crawler-data sections. All three serve collector-precomputed JSON;

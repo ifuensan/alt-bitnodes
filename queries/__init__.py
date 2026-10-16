@@ -50,6 +50,7 @@ from queries.services import (
     load_services_series,
     services_breakdown,
 )
+from queries.best_union import best_view_stats, load_best_nodes
 from queries.block_propagation import load_block, load_propagation
 from queries.util import iso2_to_iso3
 
@@ -60,6 +61,8 @@ __all__ = [
     "load_window_nodes",
     "load_window_stats",
     "window_view_stats",
+    "best_view_stats",
+    "load_best_nodes",
     "decode_services",
     "latest_services_payload",
     "load_services_series",

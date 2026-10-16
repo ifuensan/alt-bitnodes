@@ -26,6 +26,12 @@ WEEKLY_WEEKS = 12
 
 TIERS = ("daily", "weekly", "monthly")
 
+# Photos that must survive every rotation, whatever their age: the richest
+# census on record (2026-07-26, 23,507 nodes incl. 11,450 onion and 4,758
+# I2P), the anchor of the BEST view. compute_keep always keeps them, so the
+# archiver can never rotate them away.
+PINNED_TIMESTAMPS = frozenset({1785110149})
+
 FORMATS = {"csv": "text/csv", "parquet": "application/vnd.apache.parquet"}
 
 META_FILE = "meta.json"
@@ -63,7 +69,12 @@ def compute_keep(timestamps, today: dt.date) -> dict[int, str]:
             continue
         if best.get(placed) is None or ts > best[placed]:
             best[placed] = ts
-    return {ts: tier for (tier, _period), ts in best.items()}
+    keep = {ts: tier for (tier, _period), ts in best.items()}
+    for ts in PINNED_TIMESTAMPS & set(timestamps):
+        placed = tier_and_period(utc_date(ts), today)
+        if placed is not None:
+            keep[ts] = placed[0]
+    return keep
 
 
 def photo_basename(timestamp: int) -> str:

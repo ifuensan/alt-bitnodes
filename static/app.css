@@ -158,12 +158,12 @@ header h1 {
 .view-toggle button:disabled { color: var(--dim, var(--muted)); cursor: not-allowed; }
 /* The snapshot picker only makes sense in the live view; the union view
    shows its own span of snapshots in the meta text instead. */
-body[data-view^="union"] #snapshot-control { display: none; }
+body:is([data-view^="union"], [data-view="best"]) #snapshot-control { display: none; }
 /* Per-panel reminder that the figures are a union, not a snapshot. */
 .union-note { display: none; }
-body[data-view^="union"] .union-note { display: inline; }
+body:is([data-view^="union"], [data-view="best"]) .union-note { display: inline; }
 .col-seen { display: none; white-space: nowrap; }
-body[data-view^="union"] .col-seen { display: table-cell; }
+body:is([data-view^="union"], [data-view="best"]) .col-seen { display: table-cell; }
 
 /* --- Header nav tabs ------------------------------------------------------ */
 .tabs { display: flex; gap: var(--sm); }
