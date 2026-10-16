@@ -92,3 +92,14 @@ def test_pinned_photo_is_ignored_when_not_archived_yet(monkeypatch):
     pinned = ts_at(dt.date(2026, 7, 26))
     monkeypatch.setattr(archives, "PINNED_TIMESTAMPS", frozenset({pinned}))
     assert compute_keep([], dt.date(2026, 12, 1)) == {}
+
+
+def test_photo_stands_in_for_an_unreadable_raw_twin(write_snapshot, export_dir, archive_dir):
+    ts = ts_at(dt.date(2026, 7, 20))
+    (export_dir / f"{ts}.json").write_text("{not json")
+    write_photo(archive_dir, "weekly", ts, [make_row(address="1.1.1.1")])
+
+    out = write_best_union(CUTOFF)
+
+    assert out["sources"] == {"raw": 0, "photos": 1}
+    assert out["snapshots"] == 1 and out["total"] == 1

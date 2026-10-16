@@ -47,17 +47,29 @@ def compute_best_union(cutoff: dt.date, archive_root: Path = None, now: int = No
     root = archive_root or ARCHIVE_DIR
     until = _until(cutoff)
     raw = {ts for ts in list_snapshots() if ts <= until}
-    photos = {ts: tier for ts, tier in scan_archive(root).items()
-              if ts <= until and ts not in raw}
+    photos = {ts: tier for ts, tier in scan_archive(root).items() if ts <= until}
 
     latest: dict[tuple, tuple[int, list]] = {}
     used = []
+    sources = {"raw": 0, "photos": 0}
     for ts in sorted(raw | photos.keys()):
-        try:
-            rows = load_snapshot(ts) if ts in raw else _photo_rows(ts, photos[ts], root)
-        except (FileNotFoundError, OSError, ValueError):
+        # Raw first; a photo is the fallback when the raw file is gone or
+        # unreadable. Only a source that was actually read is counted.
+        rows = kind = None
+        if ts in raw:
+            try:
+                rows, kind = load_snapshot(ts), "raw"
+            except (FileNotFoundError, OSError, ValueError):
+                pass
+        if rows is None and ts in photos:
+            try:
+                rows, kind = _photo_rows(ts, photos[ts], root), "photos"
+            except (OSError, ValueError):
+                pass
+        if rows is None:
             continue
         used.append(ts)
+        sources[kind] += 1
         for r in rows:
             latest[(r[0], r[1])] = (ts, r)  # ascending ts: later sighting wins
 
@@ -68,7 +80,7 @@ def compute_best_union(cutoff: dt.date, archive_root: Path = None, now: int = No
         "as_of": cutoff.isoformat(),
         "until": used[-1] if used else None,
         "built_at": now if now is not None else int(dt.datetime.now(dt.timezone.utc).timestamp()),
-        "sources": {"raw": len(raw), "photos": len(photos)},
+        "sources": sources,
         "pinned": sorted(PINNED_TIMESTAMPS),
         **entry,
         "_nodes": [[*row, ts] for ts, row in latest.values()],
