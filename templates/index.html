@@ -38,6 +38,7 @@
       <button type="button" data-view="live" class="active">LIVE</button>
       <button type="button" data-view="union8" data-days="8" id="view-union8" title="Unique nodes seen over the last 8 days">8-DAY UNION</button>
       <button type="button" data-view="union24" data-days="24" id="view-union24" title="Unique nodes seen over the last 24 days">24-DAY UNION</button>
+      <button type="button" data-view="best" id="view-best" title="Frozen union of every snapshot up to the richest census on record">BEST UNION</button>
     </div>
     <label id="snapshot-control">Snapshot:
       <select id="snapshot-select"></select>
@@ -81,7 +82,7 @@
 <section class="grid">
   <div class="panel map-panel">
     <div class="panel-head">
-      <h2>Distribution<span class="union-note"> — unique over <span class="union-days">8</span> days</span></h2>
+      <h2>Distribution<span class="union-note"> — unique <span class="union-span">over 8 days</span></span></h2>
       <button id="map-reset" type="button" aria-label="Reset map view">RESET</button>
     </div>
     <div id="globe"></div>
@@ -89,21 +90,21 @@
   <div class="panel">
     <div class="panel-head">
       <h2>Top countries</h2>
-      <span class="panel-note union-note">unique over <span class="union-days">8</span> days</span>
+      <span class="panel-note union-note">unique <span class="union-span">over 8 days</span></span>
     </div>
     <div id="chart-countries" class="plot"></div>
   </div>
   <div class="panel panel-full">
     <div class="panel-head">
       <h2>Top user agents</h2>
-      <span class="panel-note union-note">unique over <span class="union-days">8</span> days</span>
+      <span class="panel-note union-note">unique <span class="union-span">over 8 days</span></span>
     </div>
     <div id="chart-uas" class="plot"></div>
   </div>
   <div class="panel panel-full">
     <div class="panel-head">
       <h2>Top ASNs — clearnet</h2>
-      <span class="panel-note">Tor and I2P nodes excluded (no ASN applies)<span class="union-note"> · unique over <span class="union-days">8</span> days</span></span>
+      <span class="panel-note">Tor and I2P nodes excluded (no ASN applies)<span class="union-note"> · unique <span class="union-span">over 8 days</span></span></span>
     </div>
     <div id="chart-asns" class="plot"></div>
   </div>

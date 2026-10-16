@@ -9,13 +9,17 @@ let globeInitialized = false;
 // Tor, whose connections are transient. A union is served from the hourly
 // cache (/api/window/{days}); it is never computed per request, so a window
 // may be a 404 on a fresh host — its button then disables on its own.
+// The BEST view is a third kind of union: frozen, built once from every
+// snapshot on record up to a fixed day (the era when the crawler still
+// reached Tor and I2P), served from /api/best.
 const UNION_VIEWS = { union8: 8, union24: 24 };
+const BEST_VIEW = "best";
 const DEFAULT_UNION_DAYS = 8;
 const VIEW_KEY = "pesquisa:view";
 
 // "union" was the id of the 8-day view before there were two windows; saved
 // choices and shared links still carry it.
-const KNOWN_VIEWS = ["live", ...Object.keys(UNION_VIEWS)];
+const KNOWN_VIEWS = ["live", ...Object.keys(UNION_VIEWS), BEST_VIEW];
 
 function normalizeView(value) {
   if (value === "union") return "union8";
@@ -26,6 +30,12 @@ function normalizeView(value) {
 function unionDays(view) {
   return Object.hasOwn(UNION_VIEWS, view) ? UNION_VIEWS[view] : null;
 }
+// Wording of "unique ..." in the panel notes for a view.
+function viewSpan(view) {
+  if (view === BEST_VIEW) return `up to ${bestStats?.as_of ?? "the best photo"}`;
+  return `over ${unionDays(view) ?? DEFAULT_UNION_DAYS} days`;
+}
+let bestStats = null;
 let currentView = "live";
 // The view the visitor asked for last, which may still be loading; a later
 // click supersedes an in-flight switch (see switchView).
@@ -274,8 +284,8 @@ function updateTable(nodes) {
   const note = document.getElementById("table-note");
   if (note) {
     const parts = [];
-    const days = unionDays(document.body.dataset.view);
-    if (days) parts.push(`unique over ${days} days`);
+    const view = document.body.dataset.view;
+    if (unionDays(view) || view === BEST_VIEW) parts.push(`unique ${viewSpan(view)}`);
     if (nodes.length > 1000) {
       parts.push(`first 1,000 of ${fmt.format(nodes.length)} — narrow with the filter`);
     }
@@ -354,16 +364,45 @@ async function loadUnion(days, seq = switchSeq) {
   return true;
 }
 
+function disableBestButton() {
+  const btn = document.getElementById("view-best");
+  if (!btn) return;
+  btn.disabled = true;
+  btn.title = "No frozen best union built yet";
+}
+
+// BEST view: the frozen union in the live view's payload shape. Resolves to
+// false (and disables its button) when it has not been built on this host.
+async function loadBest(seq = switchSeq) {
+  const [statsRes, nodesRes] = await Promise.all([
+    fetch("/api/best/stats"),
+    fetch("/api/best"),
+  ]);
+  if (statsRes.status === 404 || nodesRes.status === 404) {
+    disableBestButton();
+    return false;
+  }
+  if (!statsRes.ok) throw new Error(`/api/best/stats: ${statsRes.status}`);
+  if (!nodesRes.ok) throw new Error(`/api/best: ${nodesRes.status}`);
+  const [stats, payload] = await Promise.all([statsRes.json(), nodesRes.json()]);
+  bestStats = stats;
+  if (seq !== switchSeq) return true;
+  setViewButtons(BEST_VIEW); // names the cutoff day now that it is known
+  applyView(stats, payload.nodes,
+    `frozen union of ${fmt.format(stats.snapshots)} snapshots · ` +
+    `${utcStamp(stats.since, 10)} → ${utcStamp(stats.until, 10)}`);
+  return true;
+}
+
 function setViewButtons(view) {
   document.querySelectorAll(".view-toggle button").forEach((b) => {
     b.classList.toggle("active", b.dataset.view === view);
   });
   document.body.dataset.view = view;
-  const days = unionDays(view);
-  document.querySelectorAll(".union-days").forEach((el) => {
-    el.textContent = days ?? DEFAULT_UNION_DAYS;
+  document.querySelectorAll(".union-span").forEach((el) => {
+    el.textContent = viewSpan(view);
   });
-  renderWindowBand(days ?? DEFAULT_UNION_DAYS);
+  renderActiveBand();
 }
 
 // persist=false for the ?view= override: a shared link must not rewrite
@@ -373,8 +412,8 @@ async function switchView(view, { persist = true } = {}) {
   const seq = ++switchSeq;
   setViewButtons(view);
   const days = unionDays(view);
-  if (days) {
-    const ok = await loadUnion(days, seq);
+  if (days || view === BEST_VIEW) {
+    const ok = days ? await loadUnion(days, seq) : await loadBest(seq);
     if (seq !== switchSeq) return; // superseded by a later click
     if (!ok) view = "live";
   }
@@ -408,6 +447,44 @@ function renderWindowBand(days) {
   document.getElementById("kpi-win-i2p").textContent = fmt.format(w.i2p);
 }
 
+// The lower band follows the active view: the frozen union's own figures in
+// BEST, otherwise the active (or default) window.
+function renderActiveBand() {
+  const view = document.body.dataset.view;
+  if (view === BEST_VIEW) {
+    if (bestStats) renderBestBand(bestStats);
+    return;
+  }
+  renderWindowBand(unionDays(view) ?? DEFAULT_UNION_DAYS);
+}
+
+function renderBestBand(b) {
+  document.getElementById("band-window-title").textContent =
+    `Unique up to ${b.as_of} (${fmt.format(b.snapshots)} snapshots)`;
+  document.getElementById("kpi-win-total").textContent = fmt.format(b.total);
+  document.getElementById("kpi-win-clearnet").textContent = fmt.format(b.clearnet);
+  document.getElementById("kpi-win-tor").textContent = fmt.format(b.tor);
+  document.getElementById("kpi-win-i2p").textContent = fmt.format(b.i2p);
+}
+
+// Names the cutoff day on the page up front and disables the button on a
+// host where the union was never built.
+async function loadBestStats() {
+  try {
+    const res = await fetch("/api/best/stats");
+    if (res.status === 404) return disableBestButton();
+    if (!res.ok) throw new Error(`/api/best/stats: ${res.status}`);
+    bestStats = await res.json();
+    const btn = document.getElementById("view-best");
+    if (btn) btn.title = `Frozen union of every snapshot up to ${bestStats.as_of}: ` +
+      `${fmt.format(bestStats.total)} nodes, incl. ${fmt.format(bestStats.tor)} Tor and ` +
+      `${fmt.format(bestStats.i2p)} I2P`;
+    setViewButtons(document.body.dataset.view);
+  } catch (e) {
+    console.error("loadBestStats:", e);
+  }
+}
+
 async function loadWindowStats() {
   try {
     const data = await fetchJSON("/api/v1/stats/window");
@@ -418,7 +495,7 @@ async function loadWindowStats() {
       const w = windowsData.find((x) => x.days === days);
       if (!w?.distribution) disableUnionButton(days);
     }
-    renderWindowBand(unionDays(document.body.dataset.view) ?? DEFAULT_UNION_DAYS);
+    renderActiveBand();
   } catch (e) {
     // Missing data leaves the band's em-dashes; a real error (e.g. a
     // renamed element id) must still surface, not hide as "no data".
@@ -544,6 +621,7 @@ async function init() {
   // Secondary band + strip load lazily after the primary KPIs; both catch
   // and log their own errors, so the promises are deliberately not awaited.
   void loadWindowStats();
+  void loadBestStats();
   void loadServicesStrip();
 }
 

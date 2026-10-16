@@ -109,6 +109,7 @@ GET /api/v1/groups/by-ip/              IPs que hospedan más de un nodo
 GET /api/v1/stats/window               nodos únicos por red en ventanas (unión)
 GET /api/window/{days}/stats           unión de N días en la forma de un snapshot (dashboard)
 GET /api/window/{days}                 nodos de la unión de N días, con `last_seen` (dashboard)
+GET /api/best/stats, /api/best          unión congelada hasta una fecha (vista BEST UNION; `python best_union.py YYYY-MM-DD`)
 GET /api/v1/stats/propagation/         propagación de bloques (ECDF por red)
 GET /api/v1/stats/services/            adopción de service flags + serie diaria
 GET /api/v1/stats/unique-nodes/        410 Gone (retirado, ver más abajo)
@@ -271,6 +272,7 @@ GET /api/v1/groups/by-ip/              IPs hosting more than one node
 GET /api/v1/stats/window               unique nodes per network over windows
 GET /api/window/{days}/stats           N-day union in snapshot-stats shape (dashboard)
 GET /api/window/{days}                 nodes of the N-day union, with `last_seen` (dashboard)
+GET /api/best/stats, /api/best          frozen union up to a date (BEST UNION view; `python best_union.py YYYY-MM-DD`)
 GET /api/v1/stats/propagation/         block propagation (ECDF per network)
 GET /api/v1/stats/services/            service-flag adoption + daily series
 GET /api/v1/stats/unique-nodes/        410 Gone (withdrawn, see below)

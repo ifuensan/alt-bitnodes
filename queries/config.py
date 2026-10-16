@@ -22,6 +22,15 @@ WINDOW_STATS_FILE = Path(
 WINDOW_NODES_FILE = Path(
     os.environ.get("BITNODES_WINDOW_NODES_FILE", "data/window-nodes.json")
 )
+# Frozen union behind the BEST view: everything seen up to a fixed date.
+# Built once by best_union.py and never rewritten by a timer, so it outlives
+# the 90-day raw-export retention.
+BEST_STATS_FILE = Path(
+    os.environ.get("BITNODES_BEST_STATS_FILE", "data/best-union-stats.json")
+)
+BEST_NODES_FILE = Path(
+    os.environ.get("BITNODES_BEST_NODES_FILE", "data/best-union-nodes.json")
+)
 SERVICES_SERIES_FILE = Path(
     os.environ.get("BITNODES_SERVICES_SERIES_FILE", "data/services-series.json")
 )

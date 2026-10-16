@@ -19,6 +19,8 @@ os.environ["BITNODES_SERVICES_SERIES_FILE"] = str(_DATA_DIR / "services-series.j
 os.environ["BITNODES_PROPAGATION_DIR"] = str(_DATA_DIR / "propagation")
 os.environ["BITNODES_WINDOW_STATS_FILE"] = str(_DATA_DIR / "window-stats.json")
 os.environ["BITNODES_WINDOW_NODES_FILE"] = str(_DATA_DIR / "window-nodes.json")
+os.environ["BITNODES_BEST_STATS_FILE"] = str(_DATA_DIR / "best-union-stats.json")
+os.environ["BITNODES_BEST_NODES_FILE"] = str(_DATA_DIR / "best-union-nodes.json")
 
 import pytest
 
