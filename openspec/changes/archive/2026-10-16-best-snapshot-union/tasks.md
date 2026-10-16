@@ -12,6 +12,6 @@
 
 ## 3. Verification and delivery
 - [x] 3.1 Headless render at 1400 and 400 px.
-- [ ] 3.2 Full suite; PR; CI + review gates.
-- [ ] 3.3 Deploy; build the union on VM 114 (cutoff 2026-07-26); verify.
-- [ ] 3.4 Archive change, sync specs, README, Logseq, memory.
+- [x] 3.2 Full suite; PR; CI + review gates.
+- [x] 3.3 Deploy; build the union on VM 114 (cutoff 2026-07-26); verify.
+- [x] 3.4 Archive change, sync specs, README, Logseq, memory.
